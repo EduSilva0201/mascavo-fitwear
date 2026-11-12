@@ -1,0 +1,53 @@
+{
+  "name": "mascavo-fitwear",
+  "version": "1.0.0",
+  "description": "Loja virtual de moda fitness — protótipo inicial.",
+  "scripts": {
+    "assets:prepare": "node scripts/prepare-assets.mjs",
+    "db:migrate": "node scripts/wrangler-local.mjs migrate",
+    "dev": "npm run assets:prepare && node scripts/wrangler-local.mjs dev",
+    "typecheck": "tsc --noEmit && npm run typecheck:frontend",
+    "test": "node --test tests/auth.test.mjs",
+    "check": "npm run typecheck && npm test",
+    "build:check": "npm run assets:prepare && node scripts/wrangler-local.mjs build",
+    "mail:local": "node scripts/mail-local.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck:frontend": "tsc --project tsconfig.frontend.json",
+    "rail:build": "node scripts/build-rail.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EduSilva0201/mascavo-fitwear.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/EduSilva0201/mascavo-fitwear/issues"
+  },
+  "homepage": "https://github.com/EduSilva0201/mascavo-fitwear#readme",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261109.1",
+    "@tailwindcss/cli": "^4.3.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "esbuild": "^0.28.2",
+    "playwright": "^1.65.0",
+    "prettier": "3.9.10",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.159.0"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.4.0",
+    "clsx": "^2.1.1",
+    "hono": "^4.13.17",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwind-merge": "^3.7.0",
+    "zod": "^4.6.7"
+  },
+  "private": true
+}

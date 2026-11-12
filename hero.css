@@ -1,0 +1,97 @@
+﻿/* Campaign carousel: copy and photography keep independent responsive framing. */
+.hero.campaign-hero { position: relative; height: clamp(620px, 53vw, 820px); background: #ead5b9; color: #321e12; }
+.campaign-slides { height: 100%; display: grid; }
+.campaign-slide { position: relative; grid-area: 1 / 1; min-width: 0; isolation: isolate; opacity: 0; visibility: hidden; transition: opacity .65s ease-in-out, visibility .65s; }
+.campaign-slide.is-active { opacity: 1; visibility: visible; z-index: 1; }
+.campaign-image { position: absolute; top: 0; right: 0; width: auto; max-width: none; height: 100%; object-fit: contain; z-index: -2; }
+.campaign-slide::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, #ead5b9 0%, #ead5b9ef 19%, #ead5b950 38%, transparent 53%); }
+.campaign-portrait { background: #e5c9a7; }
+.campaign-portrait::before { background: linear-gradient(90deg, #ead5b9 20%, #ead5b9e6 45%, #ead5b900 70%); }
+.campaign-portrait .campaign-image { width: 53%; object-fit: cover; object-position: center 25%; }
+.campaign-copy { position: absolute; top: 50%; left: 6vw; transform: translateY(-50%); padding-bottom: 38px; max-width: 45%; }
+.campaign-eyebrow { display: block; font-size: 10px; letter-spacing: 3px; margin-bottom: 32px; }
+.campaign-hero h1, .campaign-hero h2 { font: 400 clamp(60px, 6.7vw, 106px)/1.04 Georgia, serif; letter-spacing: -4px; margin: 0 0 26px; }
+.campaign-hero h1 em, .campaign-hero h2 em { font-weight: 400; font-style: italic; color: #71452d; }
+.campaign-hero .campaign-copy p { font-size: 14px; line-height: 1.9; color: #584333; max-width: 330px; margin: 0 0 30px; }
+.campaign-cta { display: inline-flex; align-items: center; gap: 35px; background: #382115; color: #fff2e1; padding: 18px 24px; font-size: 11px; letter-spacing: 1px; transition: background .2s; }
+.campaign-cta:hover { background: #73462d; }
+.campaign-hero a:focus-visible, .campaign-hero button:focus-visible { outline: 2px solid #73462d; outline-offset: 5px; }
+.campaign-cta span { font-size: 18px; }
+.campaign-controls { position: absolute; z-index: 3; bottom: 30px; left: 6vw; display: flex; align-items: center; gap: 15px; }
+.campaign-controls[hidden] { display: none; }
+.campaign-controls > button { background: #f4e5cfad; color: #382115; border: 1px solid #73462d55; width: 36px; height: 36px; border-radius: 50%; font-size: 15px; cursor: pointer; }
+.campaign-controls > button:hover { background: #fff1dd; }
+.campaign-dots { display: flex; gap: 8px; }
+.campaign-dots button { position: relative; width: 28px; height: 36px; border: 0; background: transparent; cursor: pointer; }
+.campaign-dots button::after { content: ''; position: absolute; left: 0; right: 0; top: 17px; height: 2px; background: #73462d55; }
+.campaign-dots button[aria-current='true']::after { background: #382115; height: 3px; }
+.campaign-count { font-size: 9px; letter-spacing: 2px; }
+.campaign-controls [data-campaign-pause] { font-size: 10px; }
+.campaign-disclosure { position: absolute; z-index: 3; bottom: 15px; right: 22px; font-size: 9px; color: #382115; background: #f4e5cfc9; padding: 5px 8px; }
+.editorial-disclosure { position: absolute; bottom: 12px; left: 12px; padding: 5px 8px; background: #f4e5cfdf; color: #382115; font-size: 9px; }
+.editorial-visual img { object-position: center 28%; }
+.campaign-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 800px) {
+  .hero.campaign-hero { height: auto; background: #efe0cb; padding-bottom: 44px; }
+  .campaign-slides { height: auto; }
+  .campaign-slide { display: flex; flex-direction: column; }
+  .campaign-slide::before { display: none; }
+  .campaign-copy { position: relative; order: 0; top: auto; left: auto; transform: none; max-width: none; padding: 32px 25px 28px; min-height: 320px; box-sizing: border-box; background: #efe0cb; }
+  .campaign-eyebrow { font-size: 8px; letter-spacing: 2.3px; margin-bottom: 20px; }
+  .campaign-hero h1, .campaign-hero h2 { font-size: clamp(48px, 12vw, 76px); letter-spacing: -2.5px; margin-bottom: 17px; }
+  .campaign-hero .campaign-copy p { font-size: 12px; margin-bottom: 22px; line-height: 1.8; }
+  .campaign-cta { padding: 13px 18px; font-size: 10px; gap: 28px; }
+  .campaign-slide .campaign-image { position: relative; inset: auto; order: 1; z-index: 0; height: auto; width: 100%; aspect-ratio: 1.05; object-fit: cover; object-position: 77% center; }
+  .campaign-portrait .campaign-image { object-position: center 26%; }
+  .campaign-controls { left: 25px; bottom: 13px; gap: 12px; }
+  .campaign-disclosure { right: 10px; bottom: 76px; font-size: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .campaign-slide, .campaign-cta { transition: none; } }
+.campaign-controls [data-campaign-pause] { width: auto; height: 28px; padding: 4px 10px; border-radius: 2px; border-color: #73462d33; background: #f4e5cf90; font-size: 9px; letter-spacing: .6px; }
+/* Cinematic editorial treatment, built around the existing campaign photographs. */
+.hero.campaign-hero { height: clamp(620px, 54vw, 830px); background: #e4c7a3; }
+.campaign-slide { overflow: hidden; }
+.campaign-image { width: 100%; height: 100%; object-fit: cover; object-position: center top; transform-origin: 73% 40%; }
+.campaign-slide.is-active .campaign-image { animation: campaign-zoom 5.65s linear both; }
+.campaign-slide::before { background: linear-gradient(90deg, #f2e3cedb 0%, #eedac0ac 24%, #ead5b93d 43%, transparent 61%); }
+.campaign-portrait .campaign-image { width: 65%; object-position: center 23%; transform-origin: 70% 35%; }
+.campaign-portrait::before { background: linear-gradient(90deg, #ead5b9 20%, #ead5b9e8 35%, #ead5b940 54%, transparent 75%); }
+.campaign-copy { z-index: 1; left: 7vw; max-width: 47%; padding-bottom: 20px; }
+.campaign-eyebrow { display: inline-flex; align-items: center; gap: 12px; font-size: 9px; letter-spacing: 2.6px; margin-bottom: 28px; }
+.campaign-eyebrow::before { content: ''; width: 30px; height: 1px; background: currentColor; opacity: .55; }
+.campaign-hero h1, .campaign-hero h2 { font-size: clamp(62px, 7.2vw, 112px); line-height: .99; letter-spacing: -4.5px; margin-bottom: 30px; }
+.campaign-hero h1 em, .campaign-hero h2 em { color: #78492f; }
+.campaign-hero .campaign-copy p { font-size: 13px; line-height: 1.85; margin-bottom: 28px; }
+.campaign-copy > * { opacity: 1; }
+.campaign-hero .campaign-cta { min-height: 52px; padding: 15px 22px; background: #342014; border: 1px solid #342014; border-radius: 2px; }
+.campaign-hero .campaign-cta:hover { background: #64432c; border-color: #64432c; }
+.campaign-hero .campaign-cta span { transition: transform .2s ease; }
+.campaign-hero .campaign-cta:hover span { transform: translate(2px,-2px); }
+.campaign-controls { left: 7vw; bottom: 28px; }
+.campaign-hero[data-motion-paused='true'] .campaign-image, .campaign-hero[data-motion-paused='true'] .campaign-copy { animation-play-state: paused; }
+@keyframes campaign-zoom { from { transform: scale(1); } to { transform: scale(1.02); } }
+@keyframes campaign-reveal { from { translate: 0 8px; } to { translate: 0 0; } }
+.campaign-slide.is-active .campaign-copy { animation: campaign-reveal .65s ease-out both; }
+@media (max-width: 800px) {
+ .hero.campaign-hero { height: clamp(650px, 90svh, 800px); padding-bottom: 0; }
+ .campaign-slides { height: 100%; }
+ .campaign-slide { display: block; }
+ .campaign-slide .campaign-image { position: absolute; inset: 0; z-index: -2; height: 100%; width: 100%; aspect-ratio: auto; object-fit: cover; object-position: 76% top; transform-origin: 75% 25%; }
+ .campaign-portrait .campaign-image { object-position: 52% top; }
+ .campaign-slide::before { display: block; background: linear-gradient(0deg, #f0dfc8 0%, #f0dfc8ed 22%, #f0dfc8c9 35%, #f0dfc80a 63%, transparent 100%); }
+ .campaign-copy { position: absolute; top: auto; bottom: 48px; left: 25px; right: 25px; padding: 0; margin: 0; max-width: none; min-height: 0; transform: none; background: transparent; }
+ .campaign-eyebrow { font-size: 8px; letter-spacing: 2px; margin-bottom: 18px; }
+ .campaign-hero h1, .campaign-hero h2 { font-size: clamp(46px, 12vw, 76px); line-height: 1; letter-spacing: -2.8px; margin-bottom: 18px; }
+ .campaign-hero .campaign-copy p { font-size: 12px; margin-bottom: 20px; }
+ .campaign-hero .campaign-cta { min-height: 44px; font-size: 10px; padding: 11px 16px; }
+ .campaign-controls { left: auto; right: 22px; bottom: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+ .campaign-slide.is-active .campaign-image, .campaign-slide.is-active .campaign-copy { animation: none; }
+ .campaign-hero .campaign-cta span { transition: none; }
+}
+
+/* Feather the portrait itself so its left boundary never forms a visible seam. */
+@media (min-width: 801px) {
+ .campaign-portrait .campaign-image { -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 30%); mask-image: linear-gradient(90deg, transparent 0%, #000 30%); }
+}

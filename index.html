@@ -1,12 +1,153 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#261307"><title>Mascavo Fitwear | Movimento com estilo</title><link rel="stylesheet" href="styles.css"></head><body>
-<div class="announcement">FRETE PARA TODO O BRASIL <span>✦</span> NOVA COLEÇÃO MASCAVO <span>✦</span> COMPRA SEGURA</div>
-<header class="navbar"><a class="brand" href="#" aria-label="Mascavo Fitwear, início">MASCAVO<small>F I T W E A R</small></a><nav class="shop-nav" aria-label="Navegação principal"><a href="#">Início</a><div class="nav-dropdown"><button class="nav-drop-trigger" aria-expanded="false">Roupas fitness ▾</button><div class="nav-submenu"><a href="#produtos" data-menu-filter="Leggings">Leggings</a><a href="#produtos" data-menu-filter="Tops">Tops</a><a href="#produtos" data-menu-filter="Conjuntos">Conjuntos</a><a href="#produtos" data-menu-filter="Shorts">Shorts</a></div></div><a href="#produtos" data-menu-filter="Acessórios">Acessórios</a><a href="#produtos">Mais vendidos 🔥</a><a href="#rodape">Contato</a></nav><div class="nav-actions"><button id="menu-toggle" class="menu-toggle" aria-label="Abrir menu" aria-expanded="false">☰</button><button id="account-toggle" aria-label="Minha conta" title="Minha conta"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-5 3-8 8-8s8 3 8 8"/></svg></button><button id="search-toggle" aria-label="Ir aos produtos"><svg viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg></button><button id="cart-toggle" aria-label="Abrir carrinho"><svg viewBox="0 0 24 24"><circle cx="9" cy="20" r="1"/><circle cx="19" cy="20" r="1"/><path d="M2 3h2l2.5 12h13L22 7H5"/></svg><span id="count">0</span></button></div></header><div id="mobile-menu" class="mobile-menu" hidden><a href="#">Início</a><a href="#produtos" data-menu-filter="Leggings">Leggings</a><a href="#produtos" data-menu-filter="Tops">Tops</a><a href="#produtos" data-menu-filter="Conjuntos">Conjuntos</a><a href="#produtos" data-menu-filter="Shorts">Shorts</a><a href="#produtos" data-menu-filter="Acessórios">Acessórios</a><button id="mobile-account">Entrar / Criar conta</button></div>
-<main><section class="hero" aria-label="Destaques da coleção"><div id="hero-slides" class="hero-slides"></div><div class="hero-controls"><button id="hero-prev" aria-label="Banner anterior">‹</button><div id="hero-dots" class="hero-dots"></div><button id="hero-next" aria-label="Próximo banner">›</button></div></section>
-<section class="benefits"><span>🚚 Envio para todo o Brasil</span><span>◇ Estilo e conforto</span><span>♧ Compra segura</span><span>↔ Peças selecionadas</span></section>
-<section class="categories" id="categorias"><a href="#produtos" data-go="Leggings" class="category"><img src="https://images.unsplash.com/photo-1506629905607-d9b297dfe08a?w=700&q=85" alt="Categoria leggings"><span>Leggings <b>→</b></span></a><a href="#produtos" data-go="Tops" class="category"><img src="https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=700&q=85" alt="Categoria tops"><span>Tops <b>→</b></span></a><a href="#produtos" data-go="Conjuntos" class="category"><img src="https://images.unsplash.com/photo-1518611012118-696072aa579a?w=700&q=85" alt="Categoria conjuntos"><span>Conjuntos <b>→</b></span></a><a href="#produtos" data-go="Acessórios" class="category"><img src="https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=700&q=85" alt="Categoria acessórios"><span>Acessórios <b>→</b></span></a></section>
-<section class="editorial-feature" aria-label="Identidade Mascavo"><div class="editorial-copy"><span class="editorial-eyebrow">MASCAVO / A ESSÊNCIA DO MOVIMENTO</span><h2>Seu ritmo.<br><em>Sua essência.</em></h2><p>Peças que acompanham a sua rotina com conforto, atitude e liberdade. Descubra a coleção pensada para você.</p><a href="#produtos" class="editorial-link">Descobrir a coleção <span aria-hidden="true">↗</span></a></div><div class="editorial-visual"><img loading="lazy" src="https://images.unsplash.com/photo-1518611012118-696072aa579a?w=1100&q=85" alt="Campanha ilustrativa de moda fitness Mascavo"><span class="editorial-stamp">MASCAVO<br>FITWEAR</span></div></section><section class="shop" id="produtos"><div class="section-top"><div><div class="kicker">🔥 OS FAVORITOS DA COLEÇÃO</div><h2>Mais vendidos</h2></div><a href="#products">Ver todos →</a></div><div id="filters" class="filters"></div><div id="products" class="products"></div></section>
-<section class="closing"><p>MASCAVO FITWEAR</p><h2>Seu movimento. Sua essência.</h2></section></main>
-<footer id="rodape"><div class="footer-brand">MASCAVO <small>FITWEAR</small></div><p>Moda fitness com identidade · Protótipo demonstrativo</p><p>© Mascavo Fitwear</p></footer>
-<dialog id="product-dialog" class="modal"><button class="close" data-close aria-label="Fechar">×</button><div id="product-detail"></div></dialog>
-<dialog id="cart-dialog" class="modal cart-modal"><button class="close" data-close aria-label="Fechar">×</button><h2>Minha sacola <span id="cart-heading-count"></span></h2><div id="cart-items"></div><div id="cart-summary"></div></dialog>
-<dialog id="account-dialog" class="modal account-modal"><button class="close" data-close aria-label="Fechar">×</button><h2>Minha conta</h2><p>Para finalizar uma compra será necessário entrar ou criar um cadastro.</p><div class="account-tabs"><button data-account-tab="login" class="active">Entrar</button><button data-account-tab="register">Criar conta</button></div><form id="account-form"><div id="account-fields"></div><button class="primary" type="submit" id="account-submit">Entrar</button></form><p class="demo-note">Cadastro e login em desenvolvimento. Nenhuma informação será enviada ou armazenada nesta demonstração.</p></dialog><div id="toast" role="status" aria-live="polite"></div><script src="script.js" defer></script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#261307" />
+    <title>Mascavo Fitwear | Movimento com estilo</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="hero.css" />
+    <link rel="stylesheet" href="ui.css" />
+    <link rel="stylesheet" href="assets/rail-ui/rail.css" />
+    <link rel="preload" href="assets/campaign/movimento-logo.jpg" as="image" fetchpriority="high" />
+  </head>
+  <body>
+    <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true"><defs><symbol id="icon-bag" viewBox="0 0 24 24"><path d="M6 7h12l2 14H4L6 7Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></symbol><symbol id="icon-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></symbol><symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol><symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol><symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></symbol><symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol><symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol><symbol id="icon-truck" viewBox="0 0 24 24"><path d="M3 5h11v12H3zM14 9h4l3 4v4h-7"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></symbol><symbol id="icon-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 4-4 7-8 9-4-2-8-5-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></symbol><symbol id="icon-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></symbol><symbol id="icon-feather" viewBox="0 0 24 24"><path d="M20 4c-5-2-11 0-13 6-1 3 0 5 1 6 5 2 12-4 12-12Z"/><path d="m4 21 11-12M8 16l-1-5m5 1 4 1"/></symbol><symbol id="icon-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z"/></symbol></defs></svg>
+    <div class="announcement">
+      FRETE PARA TODO O BRASIL <span>✦</span> NOVA COLEÇÃO MASCAVO <span>✦</span> COMPRA SEGURA
+    </div>
+    <header class="navbar">
+      <a class="brand brand-image" href="#" aria-label="Mascavo Fitwear, início"><img src="assets/brand/mascavo-logo.png" alt="Mascavo Fitwear" width="2172" height="724"></a>
+      <nav class="shop-nav" aria-label="Navegação principal">
+        <a href="#">Início</a>
+        <div class="nav-dropdown">
+          <button class="nav-drop-trigger" aria-expanded="false">Roupas fitness <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-chevron"></use></svg></button>
+          <div class="nav-submenu">
+            <a href="#produtos" data-menu-filter="Leggings">Leggings</a
+            ><a href="#produtos" data-menu-filter="Tops">Tops</a
+            ><a href="#produtos" data-menu-filter="Conjuntos">Conjuntos</a
+            ><a href="#produtos" data-menu-filter="Shorts">Shorts</a><a href="#produtos" data-menu-filter="Macaquinho">Macaquinhos</a>
+          </div>
+        </div>
+        <a href="#produtos" data-menu-filter="Acessórios">Acessórios</a
+        ><a href="#produtos">Coleção</a><a href="#rodape">Contato</a>
+      </nav>
+      <div class="nav-actions">
+        <button id="menu-toggle" class="menu-toggle" aria-label="Abrir menu" aria-expanded="false"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-menu"></use></svg></button
+        ><button id="account-toggle" aria-label="Minha conta" title="Minha conta"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-user"></use></svg></button
+        ><button id="search-toggle" aria-label="Buscar produtos" aria-haspopup="dialog"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-search"></use></svg></button
+        ><button id="cart-toggle" aria-label="Abrir sacola" title="Sacola"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-bag"></use></svg><span id="count">0</span>
+        </button>
+      </div>
+    </header>
+    <div id="mobile-menu" class="mobile-menu" hidden>
+      <a href="#">Início</a><a href="#produtos" data-menu-filter="Leggings">Leggings</a
+      ><a href="#produtos" data-menu-filter="Tops">Tops</a
+      ><a href="#produtos" data-menu-filter="Conjuntos">Conjuntos</a
+      ><a href="#produtos" data-menu-filter="Shorts">Shorts</a
+      ><a href="#produtos" data-menu-filter="Acessórios">Acessórios</a
+      ><button id="mobile-account">Entrar / Criar conta</button>
+    </div>
+    <main>
+      <section class="hero campaign-hero" aria-label="Campanha Mascavo" aria-roledescription="carrossel">
+        <div class="campaign-slides">
+          <article class="campaign-slide is-active" aria-roledescription="slide" aria-label="1 de 2: Em movimento">
+            <img class="campaign-image" src="assets/campaign/movimento-logo.jpg" width="1536" height="1024" alt="modelos com conjuntos marrom e vinho e assinatura Mascavo nos tops" fetchpriority="high">
+            <div class="campaign-copy">
+              <span class="campaign-eyebrow">01 / MASCAVO EM MOVIMENTO</span>
+              <h1>Seu ritmo.<br><em>Sua ess&ecirc;ncia.</em></h1>
+              <p>Para os movimentos que fazem parte de voc&ecirc;.<br>Do treino ao seu tempo.</p>
+              <a class="campaign-cta" href="#produtos">Explore a cole&ccedil;&atilde;o <span aria-hidden="true">&#8599;</span></a>
+            </div>
+          </article>
+          <article class="campaign-slide campaign-portrait" aria-roledescription="slide" aria-label="2 de 2: Em cada detalhe" aria-hidden="true" inert>
+            <img class="campaign-image" src="assets/campaign/essencia-logo.jpg" width="1122" height="1402" alt="modelo com top marrom e assinatura Mascavo" loading="eager" decoding="async">
+            <div class="campaign-copy">
+              <span class="campaign-eyebrow">02 / EM CADA DETALHE</span>
+              <h2>Vista sua<br><em>liberdade.</em></h2>
+              <p>Conforto para acompanhar seu corpo.<br>Estilo para expressar quem voc&ecirc; &eacute;.</p>
+              <a class="campaign-cta" href="#produtos">Encontre seu look <span aria-hidden="true">&#8599;</span></a>
+            </div>
+          </article>
+        </div>
+        <div class="campaign-controls" hidden><button type="button" data-campaign-pause aria-label="Pausar troca autom&aacute;tica" aria-pressed="false">Pausar</button></div>
+      </section>
+      <div id="clothing-rail-root" class="rail-root" aria-label="Arara interativa Mascavo"></div>
+      <section class="benefits" aria-label="Diferenciais Mascavo">
+        <div class="benefit-item"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-truck"></use></svg><div><strong>De norte a sul</strong><small>Envio para todo o Brasil</small></div></div>
+        <div class="benefit-item"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-feather"></use></svg><div><strong>Feito para acompanhar</strong><small>Estilo e conforto</small></div></div>
+        <div class="benefit-item"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-shield"></use></svg><div><strong>Com tranquilidade</strong><small>Compra segura</small></div></div>
+        <div class="benefit-item"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-layers"></use></svg><div><strong>Em cada detalhe</strong><small>Pe&ccedil;as selecionadas</small></div></div>
+      </section>
+      <section class="categories" id="categorias" aria-label="Categorias">
+        <a href="#produtos" data-go="Conjuntos" class="category"><img src="assets/products/sofi/preto.png" alt="Conjunto Sofi preto"><span>Conjuntos <b><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-arrow"></use></svg></b></span></a>
+        <a href="#produtos" data-go="Macaquinho" class="category"><img src="assets/products/fluid/frente.png" alt="Macaquinho Fluid chocolate"><span>Macaquinho <b><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-arrow"></use></svg></b></span></a>
+        <a href="#produtos" data-go="Leggings" class="category category-preview"><img src="assets/categories/leggings.jpg" alt="Legging chocolate em destaque" width="1536" height="1024" loading="lazy"><span>Leggings <b><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-arrow"></use></svg></b></span><small>Em breve</small></a>
+        <a href="#produtos" data-go="Tops" class="category category-preview"><img src="assets/categories/tops.jpg" alt="Top vinho com assinatura Mascavo" width="1536" height="1024" loading="lazy"><span>Tops <b><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-arrow"></use></svg></b></span><small>Em breve</small></a>
+      </section>
+      <section class="detail-features" aria-labelledby="features-title">
+        <div class="feature-heading"><span class="kicker">MASCAVO / UM OLHAR MAIS PERTO</span><h2 id="features-title">A diferen&ccedil;a est&aacute;<br><em>nos detalhes.</em></h2><p>Conhe&ccedil;a de perto o que faz parte de cada pe&ccedil;a.</p></div>
+        <div class="feature-layout">
+          <div class="feature-photos" aria-live="off"><figure data-feature-photo="0" ><img src="assets/products/fluid/detalhe.jpeg" alt="Detalhe do bolso lateral sob o shorts sobreposto do Macaquinho Fluid" loading="lazy"><figcaption><span>01 / EM FOCO</span><strong>Macaquinho Fluid</strong></figcaption></figure><figure data-feature-photo="1" hidden><img src="assets/products/race/azul-petroleo-costas.jpeg" alt="Costas do Conjunto Race azul petróleo, com recorte aberto e faixas cruzadas" loading="lazy"><figcaption><span>02 / EM FOCO</span><strong>Conjunto Race</strong></figcaption></figure><figure data-feature-photo="2" hidden><img src="assets/products/duo/preto-detalhe.png" alt="Top preto do Conjunto Duo com detalhes em creme e assinatura Mascavo" loading="lazy"><figcaption><span>03 / EM FOCO</span><strong>Conjunto Duo</strong></figcaption></figure></div>
+          <div class="feature-options"><details class="feature-item" name="mascavo-features" data-feature="0" open><summary><span class="feature-number">01</span><span>Praticidade que acompanha.</span><svg class="ui-icon" aria-hidden="true"><use href="#icon-chevron"></use></svg></summary><div class="feature-body"><p>O bolso lateral do Fluid fica na camada interna do shorts sobreposto. Um detalhe para levar pequenos itens com você.</p><button type="button" data-open="10">Conhe&ccedil;a o Fluid <svg class="ui-icon" aria-hidden="true"><use href="#icon-arrow"></use></svg></button></div></details><details class="feature-item" name="mascavo-features" data-feature="1" ><summary><span class="feature-number">02</span><span>Um novo olhar para as costas.</span><svg class="ui-icon" aria-hidden="true"><use href="#icon-chevron"></use></svg></summary><div class="feature-body"><p>No Race, o recorte aberto encontra as faixas cruzadas do top. O desenho continua interessante de todos os ângulos.</p><button type="button" data-open="11">Conhe&ccedil;a o Race <svg class="ui-icon" aria-hidden="true"><use href="#icon-arrow"></use></svg></button></div></details><details class="feature-item" name="mascavo-features" data-feature="2" ><summary><span class="feature-number">03</span><span>Contraste com identidade.</span><svg class="ui-icon" aria-hidden="true"><use href="#icon-chevron"></use></svg></summary><div class="feature-body"><p>Os acabamentos em creme do Duo destacam o decote, a base do top e o bolso da legging. A assinatura Mascavo completa o conjunto.</p><button type="button" data-open="14">Conhe&ccedil;a o Duo <svg class="ui-icon" aria-hidden="true"><use href="#icon-arrow"></use></svg></button></div></details></div>
+        </div>
+      </section>
+      <section class="shop" id="produtos">
+        <div class="section-top">
+          <div>
+            <div class="kicker">A SELE&Ccedil;&Atilde;O MASCAVO</div>
+            <h2 id="catalog-title">Nossa coleção</h2>
+          </div>
+          <a class="collection-link" href="#filters">Explorar categorias <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-arrow"></use></svg></a>
+        </div>
+        <div id="filters" class="filters"></div>
+        <div id="catalog-empty" class="catalog-empty" role="status" hidden><span class="kicker">EM BREVE NA MASCAVO</span><h3>Novidades a caminho.</h3><p>Estamos preparando novas pe&ccedil;as para esta categoria.<br>Enquanto isso, conhe&ccedil;a os produtos da nossa cole&ccedil;&atilde;o.</p><button type="button" class="campaign-cta" data-filter="Todos">Ver toda a cole&ccedil;&atilde;o</button></div>
+        <div id="products" class="products"></div>
+      </section>
+
+    </main>
+    <footer id="rodape" class="brand-footer compact-footer">
+      <a href="#" class="footer-logo" aria-label="Mascavo Fitwear, início"><img src="assets/brand/mascavo-logo.png" alt="Mascavo Fitwear" width="2172" height="724" loading="lazy"></a>
+      <nav aria-label="Links do rodapé"><a href="#produtos">Cole&ccedil;&atilde;o</a><a href="#categorias">Categorias</a><button type="button" data-footer-account>Minha conta</button><button type="button" data-open-bag>Sacola</button></nav>
+      <div class="compact-footer-meta"><span>&copy; Mascavo Fitwear</span><a href="#">Voltar ao topo &uarr;</a></div>
+    </footer>
+    <dialog id="search-dialog" class="search-dialog" aria-labelledby="search-title">
+      <div class="search-heading"><div><span class="kicker">ENCONTRE SEU LOOK</span><h2 id="search-title">O que voc&ecirc; procura?</h2></div><button type="button" class="close" data-close aria-label="Fechar busca"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button></div>
+      <div class="search-input-wrap"><svg class="ui-icon" aria-hidden="true"><use href="#icon-search"></use></svg><input id="product-search" type="search" placeholder="Nome, cor ou categoria" aria-label="Buscar produtos por nome, cor ou categoria" autocomplete="off"><kbd>ESC</kbd></div>
+      <p id="search-status" role="status" class="search-status"></p><div id="search-results" class="search-results"></div>
+    </dialog>
+    <dialog id="product-dialog" class="modal" aria-labelledby="detail-title">
+      <button class="close" data-close aria-label="Fechar"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-close"></use></svg></button>
+      <div id="product-detail"></div>
+    </dialog>
+    <dialog id="cart-dialog" class="modal cart-modal" aria-labelledby="bag-title">
+      <button class="close" data-close aria-label="Fechar"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-close"></use></svg></button>
+      <h2 id="bag-title">Sua sele&ccedil;&atilde;o <span id="cart-heading-count"></span></h2>
+      <div id="cart-items"></div>
+      <div id="cart-summary"></div>
+    </dialog>
+    <dialog id="account-dialog" class="modal account-modal">
+      <button class="close" data-close aria-label="Fechar"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-close"></use></svg></button>
+      <h2>Minha conta</h2>
+      <p>Para finalizar uma compra será necessário entrar ou criar um cadastro.</p>
+      <div class="account-tabs">
+        <button data-account-tab="login" class="active">Entrar</button
+        ><button data-account-tab="register">Criar conta</button>
+      </div>
+      <form id="account-form">
+        <div id="account-fields"></div>
+        <button class="primary" type="submit" id="account-submit">Entrar</button>
+      </form>
+      <p class="demo-note">
+        Cadastro e login em desenvolvimento. Nenhuma informação será enviada ou armazenada nesta
+        demonstração.
+      </p>
+    </dialog>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script src="script.js" defer></script>
+    <script src="hero.js" defer></script>
+    <script src="ui.js" defer></script>
+    <script type="module" src="assets/rail-ui/rail.js"></script>
+    <script src="account.js" defer></script>
+  </body>
+</html>

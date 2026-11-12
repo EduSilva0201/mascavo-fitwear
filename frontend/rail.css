@@ -1,0 +1,38 @@
+﻿@layer theme, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@source "../components/ui/product-rail-gallery.tsx";
+@source "./rail.tsx";
+@theme inline {
+ --color-background: var(--rail-background);
+ --color-foreground: var(--rail-foreground);
+ --color-muted-foreground: var(--rail-muted);
+ --color-card: var(--rail-background);
+ --color-card-foreground: var(--rail-foreground);
+ --color-border: #40210f26;
+ --color-ring: #bf8b5e;
+}
+.rail-root, .rail-dialog { --rail-background: #f4ede3; --rail-foreground: #40210f; --rail-muted: #806c5d; font-family: Arial, sans-serif; color: var(--rail-foreground); }
+.rail-root { margin: 35px 6vw 12px; border: 1px solid #40210f1a; border-radius: 4px; overflow: hidden; }
+.mascavo-rail { padding: 15px 30px; }
+.mascavo-rail > header { gap: 18px; }
+.mascavo-rail > header > p { font-size: 9px; font-weight: 400; }
+.mascavo-rail h2 { font: 400 clamp(28px,3vw,44px)/1.12 Georgia,serif; margin: 0; }
+.mascavo-rail [data-garment] { border: 0; padding: 0; background: transparent; }
+.mascavo-rail p { margin: 0; }
+.rail-collection-link { display: inline-flex; align-items: center; gap: 25px; font-size: 11px; padding: 12px 0; border-bottom: 1px solid #40210f66; }
+.rail-placeholder { text-align: center; min-height: 220px; display: grid; place-content: center; gap: 20px; background: #f4ede3; }
+.rail-dialog { z-index: 100; }
+.rail-dialog h3 { font: 400 32px/1.2 Georgia,serif; margin: 0; }
+.rail-dialog p { margin: 0; }
+.rail-dialog button { font: inherit; background: transparent; border: 0; }
+.rail-dialog ul { list-style: none; margin: 0; padding: 0; }
+.rail-shop-link { align-self: flex-start; border: 1px solid #40210f55 !important; padding: 12px 20px; font-size: 12px !important; margin-top: 12px; border-radius: 2px; }
+@media(max-width:620px) { .rail-root { margin: 24px 20px; } .mascavo-rail { padding: 8px; } .rail-dialog { padding: 20px; } .rail-dialog h3 { font-size: 26px; } .rail-shop-link { align-self: center; } }
+.mascavo-rail [data-stage] { max-width: 760px; margin-left: auto; margin-right: auto; }
+.mascavo-rail > div:last-child { padding-bottom: 24px; }
+@media(max-width:767px) {
+ .rail-dialog { display: block; background: var(--rail-background); }
+ .rail-dialog > .relative.grid { padding-top: 48px; padding-bottom: 36px; }
+ .rail-dialog [data-rail-detail-stage] { height: min(44svh, 400px); }
+}
