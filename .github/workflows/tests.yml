@@ -1,0 +1,42 @@
+name: Mascavo Tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  quality:
+    name: Required tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      PLAYWRIGHT_CHANNEL: chromium
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Typecheck and mandatory local tests
+        run: npm run check
+      - name: Unit coverage (limited scope)
+        if: ${{ !cancelled() }}
+        run: npm run test:coverage
+      - name: Production dependency vulnerability check
+        run: npm audit --omit=dev --audit-level=high
+      - name: Upload reports and screenshots
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: mascavo-test-results
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: warn

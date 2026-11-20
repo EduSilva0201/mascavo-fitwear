@@ -1,10 +1,15 @@
 import { mkdir, copyFile } from 'node:fs/promises';
 // Explicit allowlist: never publish the repository root or server sources.
 await mkdir('dist/public', { recursive: true });
-for (const name of ['index.html', 'styles.css', 'script.js', 'account.js', 'hero.css', 'hero.js', 'ui.css', 'ui.js']) {
+for (const name of ['accessibility.css', 'accessibility.js']) {
+  await copyFile(name, `dist/public/${name}`);
+}
+for (const name of ['index.html', 'styles.css', 'script.js', 'account.js', 'hero.css', 'hero.js', 'ui.css', 'ui.js', 'admin.html', 'admin.css', 'admin.js', 'store.js', 'preloader.css', 'preloader.js', 'content.css', 'faq.js', 'duvidas-frequentes.html']) {
   await copyFile(name, `dist/public/${name}`);
 }
 await mkdir('dist/public/assets/hero', { recursive: true });
+await mkdir('dist/public/assets/testimonials', { recursive: true });
+for (const name of ['ana','beatriz','camila']) await copyFile(`assets/testimonials/avatar-${name}.svg`,`dist/public/assets/testimonials/avatar-${name}.svg`);
 for (const name of [
   'macaquinho-marrom',
   'conjunto-preto',

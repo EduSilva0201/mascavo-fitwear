@@ -2,7 +2,7 @@
 import type { Env } from '../../env';
 
 type Product = { id: number; name: string; category: string; description: string; price_cents: number; provisional: number };
-type Variant = { product_id: number; color: string; size: string; stock: number; image_url: string };
+type Variant = { product_id: number; color: string; size: string; stock: number; image_url: string; color_hex: string | null };
 type Image = { product_id: number; src: string; label: string; color: string | null };
 const catalog = new Hono<{ Bindings: Env }>();
 catalog.get('/', async (c) => {
@@ -22,14 +22,16 @@ catalog.get('/', async (c) => {
     const rows = variants.filter(v => v.product_id === p.id);
     const stock: Record<string, Record<string, number>> = {};
     const photos: Record<string, string> = {};
+    const colorHex: Record<string,string> = {};
     for (const v of rows) {
       (stock[v.color] ??= {})[v.size] = v.stock;
       photos[v.color] = v.image_url;
+      if(v.color_hex)colorHex[v.color]=v.color_hex;
     }
     return {
       id: p.id, name: p.name, category: p.category, description: p.description,
       price: p.price_cents / 100, priceCents: p.price_cents, provisional: Boolean(p.provisional), best: false,
-      colors: [...new Set(rows.map(v => v.color))], sizes: [...new Set(rows.map(v => v.size))], images: photos, stock,
+      colors: [...new Set(rows.map(v => v.color))], sizes: [...new Set(rows.map(v => v.size))], images: photos, stock, colorHex,
       gallery: images.filter(i => i.product_id === p.id).map(i => ({ src: i.src, label: i.label, ...(i.color ? { color: i.color } : {}) })),
     };
   });

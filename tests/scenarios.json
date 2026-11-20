@@ -1,0 +1,40 @@
+{
+  "webhooks": [
+    "Asaas: reject missing or invalid asaas-access-token",
+    "Asaas: persist event before acknowledgment and retry safely on database failure",
+    "Asaas: duplicate event has one financial effect",
+    "Asaas: old pending event cannot reverse confirmed payment",
+    "Asaas: validate payment owner, reference, amount and installment group",
+    "Asaas: pending, overdue, refused and cancelled charges do not release shipment",
+    "Asaas: refunds, partial refunds and chargebacks update payment safely",
+    "Melhor Envio: verify X-ME-Signature over raw request bytes",
+    "Melhor Envio: reject modified body, wrong signature and unrelated label",
+    "Melhor Envio: duplicate and out-of-order events preserve history and status",
+    "Melhor Envio: reconcile tracking after missed webhook"
+  ],
+  "checkout": [
+    "Reserve the last variant atomically between concurrent customers",
+    "Save immutable order items, full address, freight and fiscal data",
+    "Create order and connect Asaas payment to that order",
+    "Expire reservation and handle payment arriving after expiry",
+    "Paid order becomes ready for shipment only after fiscal checks",
+    "Create Melhor Envio cart entry once per shipment",
+    "Purchase sandbox label only for confirmed payment",
+    "Unknown purchase result is reconciled before retry",
+    "Generate and print existing label without a second purchase",
+    "Insufficient balance, carrier failure and generation failure remain retryable",
+    "Cancel sandbox label when supported and preserve replacement history",
+    "Generated label does not mark order as posted",
+    "Missing tracking code is displayed as pending",
+    "Posted, in-transit, delivered and delivery-exception statuses reach authenticated customer",
+    "Complete account-to-delivery flow with mocked providers"
+  ],
+  "email": [
+    "Order and payment confirmations enqueue notifications once",
+    "Posted shipment sends email only after actual posting",
+    "Tracking availability and delivery notifications are deduplicated",
+    "Retry email failures without resending a successful message",
+    "Ambiguous email timeout outside provider idempotency window requires reconciliation",
+    "Automated tests never deliver messages to real customers"
+  ]
+}

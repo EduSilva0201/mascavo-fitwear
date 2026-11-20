@@ -4,4 +4,20 @@ export interface Env {
   ASSETS: Fetcher;
   APP_ENV: string;
   APP_ORIGIN: string;
+  STAGING_USERNAME?: string;
+  STAGING_PASSWORD?: string;
+  ASAAS_API_KEY?: string;
+  ASAAS_WEBHOOK_TOKEN?: string;
+  MELHOR_ENVIO_TOKEN?: string;
+  MELHOR_ENVIO_CLIENT_SECRET?: string;
+  MELHOR_ENVIO_CLIENT_ID?: string;
+  MELHOR_ENVIO_REFRESH_TOKEN?: string;
+  MELHOR_ENVIO_TOKEN_EXPIRES_AT?: string;
+  COMMERCE_MAINTENANCE_TOKEN?: string;
+  MELHOR_ENVIO_USER_AGENT?: string;
+  SHIPPING_ORIGIN_CEP?: string;
+  SHIPPING_ITEM_WEIGHT_KG?: string;
+  SHIPPING_ITEM_WIDTH_CM?: string;
+  SHIPPING_ITEM_HEIGHT_CM?: string;
+  SHIPPING_ITEM_LENGTH_CM?: string;
 }

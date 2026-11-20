@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mascavo-fitwear-staging",
+  "main": "backend/src/index.ts",
+  "compatibility_date": "2026-11-09",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "teste.mascavofit.com.br", "custom_domain": true }],
+  "vars": {
+    "APP_ENV": "staging",
+    "APP_ORIGIN": "https://teste.mascavofit.com.br",
+    "SHIPPING_ORIGIN_CEP": "73060604",
+    "MELHOR_ENVIO_USER_AGENT": "Mascavo Fitwear Homologacao"
+  },
+  "assets": { "directory": "dist/public", "binding": "ASSETS", "run_worker_first": true },
+  "d1_databases": [{
+    "binding": "DB", "database_name": "mascavo-staging",
+    "database_id": "cce9cf51-34b2-4649-8f09-f57ce802162a", "migrations_dir": "backend/migrations"
+  }],
+  "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "mascavo-images-staging" }],
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": { "enabled": true }
+}

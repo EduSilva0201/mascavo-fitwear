@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Mascavo · Ateliê de gestão</title>
+    <link rel="stylesheet" href="admin.css" />
+  </head>
+  <body>
+    <section id="admin-login" class="login-shell">
+      <div class="login-card">
+        <a class="wordmark" href="/">MASCAVO<small>FITWEAR</small></a>
+        <div class="login-icon" aria-hidden="true">◇</div>
+        <span class="eyebrow">ATELIÊ DE GESTÃO</span>
+        <h1>Seu negócio,<br />em movimento.</h1>
+        <p>Entre para cuidar da sua coleção.</p>
+        <form id="login-form">
+          <label>E-mail<input name="email" type="email" required autocomplete="username" /></label
+          ><label
+            >Senha<input
+              name="password"
+              type="password"
+              required
+              autocomplete="current-password" /></label
+          ><button class="primary">Entrar no painel <span>↗</span></button>
+        </form>
+        <p id="login-feedback" role="status"></p>
+        <a href="/">← Voltar à loja</a
+        ><small class="local-note">Acesso reservado à administração · ambiente local</small>
+      </div>
+    </section>
+    <div id="admin-shell" hidden>
+      <aside class="sidebar">
+        <a class="wordmark" href="/admin">MASCAVO<small>FITWEAR / STUDIO</small></a
+        ><span class="eyebrow nav-label">SEU ESPAÇO DE GESTÃO</span>
+        <nav aria-label="Administração">
+          <button data-page="overview">◈ <span>Visão geral</span></button
+          ><button data-page="products">▦ <span>Produtos</span></button
+          ><button data-page="inventory">≋ <span>Estoque</span></button
+          ><button data-page="media">▧ <span>Biblioteca de imagens</span></button
+          ><button data-page="categories">⊞ <span>Categorias</span></button
+          ><button data-page="testimonials">❞ <span>Depoimentos</span></button
+          ><button data-page="faq">? <span>Dúvidas frequentes</span></button
+          ><button data-page="settings">⚙ <span>Minha loja</span></button
+          ><button data-page="orders">▤ <span>Pedidos e envios</span></button
+          ><button data-page="fulfillment">↗ <span>Remetente e pacotes</span></button
+          ><button data-page="order-mail">✉ <span>E-mails de teste</span></button
+          ><button data-page="audit">◷ <span>Atividades</span></button>
+        </nav>
+        <div class="sidebar-bottom">
+          <span class="environment-dot">Sandbox local</span
+          ><a href="/" target="_blank" rel="noopener">Abrir vitrine ↗</a
+          ><button id="logout">Sair da conta</button>
+        </div>
+      </aside>
+      <div class="workspace">
+        <header class="topbar">
+          <span>Mascavo / <strong id="breadcrumb">Visão geral</strong></span
+          ><span class="admin-badge">Administração</span>
+        </header>
+        <main id="main" tabindex="-1"></main>
+        <footer class="admin-footer">
+          MASCAVO STUDIO <span>Pequenos detalhes. Grandes movimentos.</span>
+        </footer>
+      </div>
+    </div>
+    <div id="notification" role="status" aria-live="polite" hidden></div>
+    <dialog id="editor" aria-labelledby="editor-title">
+      <form id="product-form">
+        <header class="editor-header">
+          <div>
+            <span class="eyebrow">SUA COLEÇÃO, DO SEU JEITO</span>
+            <h2 id="editor-title">Novo produto</h2>
+          </div>
+          <button type="button" class="icon-button" data-close aria-label="Fechar editor">×</button>
+        </header>
+        <div id="editor-fields"></div>
+        <footer class="editor-footer">
+          <p id="editor-feedback" role="status"></p>
+          <button type="button" class="secondary" data-close>Cancelar</button
+          ><button class="primary" id="save-product">Salvar produto ↗</button>
+        </footer>
+      </form>
+    </dialog>
+    <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+      <h2 id="confirm-title">Descartar alterações?</h2>
+      <p>Existem alterações que ainda não foram salvas.</p>
+      <div class="actions">
+        <button class="secondary" id="keep-editing">Continuar editando</button
+        ><button class="primary" id="discard-editing">Descartar</button>
+      </div>
+    </dialog>
+    <dialog id="category-dialog" aria-labelledby="category-title">
+      <form id="category-edit-form">
+        <header class="editor-header">
+          <h2 id="category-title">Editar categoria</h2>
+          <button class="icon-button" type="button" id="close-category" aria-label="Fechar">
+            ×
+          </button>
+        </header>
+        <section class="editor-section">
+          <label>Nome<input name="category-name" required maxlength="80" /></label>
+          <p class="hint">
+            Produtos vinculados serão atualizados ao renomear. Uma categoria só pode ser removida
+            quando estiver vazia.
+          </p>
+          <p id="category-feedback" role="status"></p>
+        </section>
+        <footer class="editor-footer">
+          <button type="button" class="danger" id="delete-category">Remover vazia</button
+          ><button class="primary">Salvar nome</button>
+        </footer>
+      </form>
+    </dialog>
+    <script src="admin.js" defer></script>
+    <dialog id="content-editor" aria-labelledby="content-editor-title">
+      <form id="content-form">
+        <header class="editor-header">
+          <div>
+            <span class="eyebrow">MASCAVO / CONTEÚDO COM CUIDADO</span>
+            <h2 id="content-editor-title">Editar conteúdo</h2>
+          </div>
+          <button type="button" class="icon-button" data-content-close aria-label="Fechar editor">
+            ×
+          </button>
+        </header>
+        <section class="editor-section" id="content-fields"></section>
+        <div class="editor-section" id="content-discard" hidden>
+          <p>Há alterações que ainda não foram salvas.</p>
+          <div class="actions">
+            <button type="button" class="secondary" id="content-keep">Continuar editando</button
+            ><button type="button" class="danger" id="content-discard-confirm">
+              Descartar alterações
+            </button>
+          </div>
+        </div>
+        <footer class="editor-footer">
+          <p id="content-feedback" role="status"></p>
+          <button type="button" class="secondary" data-content-close>Cancelar</button
+          ><button class="primary" id="content-save">Salvar conteúdo ↗</button>
+        </footer>
+      </form>
+    </dialog>
+  </body>
+</html>

@@ -1292,3 +1292,18 @@ footer {
   opacity: 0.6;
   cursor: wait;
 }
+/* Sandbox integration controls in the shopping bag. */
+.sandbox-tests { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #ded6cb; }
+.sandbox-tests summary { cursor: pointer; font-weight: 600; }
+.sandbox-tests p { margin: .75rem 0; font-size: .85rem; line-height: 1.5; }
+.sandbox-tests label { display: grid; gap: .4rem; margin: 1rem 0; }
+.sandbox-tests input { padding: .75rem; border: 1px solid #b8aa9d; border-radius: 4px; width: 100%; box-sizing: border-box; }
+.sandbox-tests button { padding: .7rem; border: 1px solid #b8aa9d; border-radius: 4px; margin: .25rem .25rem .25rem 0; cursor: pointer; }
+.sandbox-tests button:disabled { opacity: .55; cursor: wait; }
+.sandbox-tests a { text-decoration: underline; }
+.sandbox-tests select { width: 100%; padding: .75rem; border: 1px solid #b8aa9d; border-radius: 4px; background: #fffaf4; color: inherit; }
+.sandbox-tests [hidden] { display: none !important; }
+.sandbox-tests fieldset { margin: 1rem 0; padding: .75rem; border: 1px solid #ded6cb; }
+.sandbox-tests .shipping-options label { display: flex; align-items: center; gap: .65rem; cursor: pointer; }
+.sandbox-tests .shipping-options input { width: auto; flex: 0 0 auto; }
+.sandbox-tests .checkout-total { font-weight: 700; font-size: 1rem; }

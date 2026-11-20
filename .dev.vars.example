@@ -1,0 +1,19 @@
+# Copie para .dev.vars e preencha apenas credenciais de SANDBOX.
+# Nunca coloque este arquivo de segredos no frontend.
+ASAAS_API_KEY=
+ASAAS_WEBHOOK_TOKEN=
+COMMERCE_MAINTENANCE_TOKEN=
+MELHOR_ENVIO_TOKEN=
+MELHOR_ENVIO_CLIENT_ID=
+MELHOR_ENVIO_CLIENT_SECRET=
+MELHOR_ENVIO_REDIRECT_URI=
+# Preenchidos automaticamente após autorização OAuth local.
+MELHOR_ENVIO_REFRESH_TOKEN=
+MELHOR_ENVIO_TOKEN_EXPIRES_AT=
+MELHOR_ENVIO_USER_AGENT="Mascavo Fitwear (seu-email@exemplo.com)"
+SHIPPING_ORIGIN_CEP=
+# Medidas unitarias de teste. Substituir por medidas reais por SKU antes de vender.
+SHIPPING_ITEM_WEIGHT_KG=0.3
+SHIPPING_ITEM_WIDTH_CM=20
+SHIPPING_ITEM_HEIGHT_CM=4
+SHIPPING_ITEM_LENGTH_CM=25

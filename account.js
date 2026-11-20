@@ -87,6 +87,25 @@
       el.addEventListener('invalid', () => el.setCustomValidity('Cole o código completo de 64 caracteres, sem espaços.'));
     }
     wrapper.append(el);
+    wrapper.className = 'auth-field';
+    const icon = document.createElement('span');
+    icon.className = 'auth-field-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' + (type === 'email' ? '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3 7 9 6 9-6"/>' : type === 'password' ? '<rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>' : '<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>') + '</svg>';
+    wrapper.append(icon);
+    if (type === 'password') {
+      const toggle = document.createElement('button');
+      toggle.type = 'button'; toggle.className = 'password-toggle'; toggle.textContent = 'Mostrar';
+      toggle.setAttribute('aria-label', 'Mostrar ' + label.toLowerCase());
+      toggle.setAttribute('aria-pressed', 'false');
+      toggle.onclick = () => {
+        const visible = el.type === 'password'; el.type = visible ? 'text' : 'password';
+        toggle.textContent = visible ? 'Ocultar' : 'Mostrar';
+        toggle.setAttribute('aria-label', (visible ? 'Ocultar ' : 'Mostrar ') + label.toLowerCase());
+        toggle.setAttribute('aria-pressed', String(visible));
+      };
+      wrapper.append(toggle);
+    }
     fields.append(wrapper);
   }
 
@@ -180,7 +199,10 @@
     document.querySelector('#account-extra')?.remove();
     const extra = document.createElement('div');
     extra.id = 'account-extra';
-    dialog.append(extra);
+    (dialog.querySelector('.account-content') || dialog).append(extra);
+    dialog.dataset.view = customer ? 'profile' : tab;
+    const title = dialog.querySelector('#account-title');
+    if (title) title.textContent = customer ? 'Minha conta.' : ({ login: 'Bom ter você aqui.', register: 'Seu próximo movimento.', forgot: 'Vamos recuperar seu acesso.', reset: 'Um novo começo.', verify: 'Falta só confirmar.' }[tab]);
     if (customer) {
       const text = document.createElement('p');
       text.textContent =
@@ -212,13 +234,17 @@
       const profilePanel = element('section', '', 'profile-panel');
       extra.append(profilePanel, logout);
       loadProfile(profilePanel);
+      const ordersPanel = element('section', '', 'profile-panel');
+      extra.append(ordersPanel);
+      loadOrders(ordersPanel);
       note.textContent =
-        'A compra será habilitada após a integração de estoque, pagamento e frete.';
+        'Seus dados e endereços, sempre à mão.';
       return;
     }
     document
       .querySelectorAll('[data-account-tab]')
       .forEach((b) => b.classList.toggle('active', b.dataset.accountTab === tab));
+    document.querySelectorAll('[data-account-tab]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.accountTab === tab)));
     if (tab === 'register') input('Nome completo', 'name', 'text', 'name');
     if (['login', 'register', 'forgot'].includes(tab)) input('E-mail', 'email', 'email', 'email');
     if (['reset', 'verify'].includes(tab)) input('Código recebido por e-mail', 'token');
@@ -253,6 +279,41 @@
       tab === 'register' || tab === 'reset'
         ? 'Use uma senha de 12 a 128 caracteres. Neste ambiente, utilize apenas dados fictícios.'
         : 'Ambiente de desenvolvimento: utilize apenas dados fictícios.';
+  }
+  async function loadOrders(root) {
+    root.replaceChildren(element('h3', 'Meus pedidos'));
+    try {
+      const response = await fetch('/api/v1/orders');
+      const data = await response.json();
+      if (!response.ok) throw Error(data.error);
+      if (!root.isConnected) return;
+      if (!data.orders.length) root.append(element('p', 'Você ainda não tem pedidos.'));
+      const states = { pending:'Aguardando pagamento', paid:'Pagamento confirmado', review:'Revisão da cobrança', creating:'Preparando cobrança', refund:'Estorno em análise ou concluído', chargeback:'Contestação', late_payment:'Pagamento após expiração: em revisão', blocked:'Pagamento não aprovado' };
+      for (const order of data.orders) {
+        const card = element('details'); card.append(element('summary', 'Pedido ' + order.id.slice(0,8) + ' · ' + (order.amount_cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})));
+        const status = element('p', states[order.payment_state] || order.payment_state);
+        const refresh = element('button','Atualizar pagamento e entrega','account-link'); refresh.type='button';
+        refresh.onclick = async () => {
+          refresh.disabled = true;
+          try {
+            if (!csrfToken) await csrf();
+            const r = await fetch('/api/v1/orders/'+order.id+'/reconcile', {method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken},body:'{}'});
+            const payment = await r.json(); if (!r.ok) throw Error(payment.error);
+            const detail = await (await fetch('/api/v1/orders/'+order.id)).json();
+            status.textContent = states[payment.paymentState] || payment.paymentState;
+            card.querySelectorAll('[data-tracking]').forEach(n=>n.remove());
+            for (const shipment of detail.shipments) {
+              const line = element('p', 'Entrega: ' + shipment.state + ' · Rastreio: ' + (shipment.tracking || 'aguardando transportadora'));
+              line.dataset.tracking='true'; card.append(line);
+              if (shipment.tracking_url) { const link=element('a','Acompanhar entrega'); link.href=shipment.tracking_url; link.target='_blank'; link.rel='noopener noreferrer'; link.dataset.tracking='true'; card.append(link); }
+            }
+          } catch(error) { toast(error.message); } finally { refresh.disabled=false; }
+        };
+        card.append(status,refresh);
+        if (order.invoice_url) { const url=new URL(order.invoice_url); if(url.protocol==='https:'&&url.hostname==='sandbox.asaas.com') {const link=element('a','Abrir pagamento');link.href=url.href;link.target='_blank';link.rel='noopener noreferrer';card.append(link);} }
+        root.append(card);
+      }
+    } catch(error) { root.append(element('p',error.message || 'Pedidos indisponíveis.')); }
   }
   window.openAccount = async () => {
     if (busy) return;

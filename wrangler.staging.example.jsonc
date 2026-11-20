@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mascavo-fitwear-staging",
+  "main": "backend/src/index.ts",
+  "compatibility_date": "2026-11-09",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "teste.SEUDOMINIO.com.br", "custom_domain": true }],
+  "vars": {
+    "APP_ENV": "staging",
+    "APP_ORIGIN": "https://teste.SEUDOMINIO.com.br",
+    "SHIPPING_ORIGIN_CEP": "73060604",
+    "MELHOR_ENVIO_USER_AGENT": "Mascavo Fitwear Homologacao"
+  },
+  "assets": { "directory": "dist/public", "binding": "ASSETS", "run_worker_first": true },
+  "d1_databases": [{
+    "binding": "DB", "database_name": "mascavo-staging",
+    "database_id": "PREENCHER_ID_DO_BANCO_STAGING", "migrations_dir": "backend/migrations"
+  }],
+  "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "mascavo-images-staging" }],
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": { "enabled": true }
+}

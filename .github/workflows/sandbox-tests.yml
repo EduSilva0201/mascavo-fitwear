@@ -1,0 +1,40 @@
+name: Mascavo Sandbox (manual only)
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        type: choice
+        description: Sandbox provider (read and quote only)
+        options: [both, asaas, melhorenvio]
+        default: both
+permissions:
+  contents: read
+concurrency:
+  group: mascavo-sandbox
+  cancel-in-progress: false
+jobs:
+  sandbox:
+    runs-on: ubuntu-latest
+    environment: sandbox-tests
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+      - run: npm ci
+      - name: Explicit sandbox connectivity check
+        run: npm run test:sandbox
+        env:
+          RUN_SANDBOX_TESTS: '1'
+          SANDBOX_PROVIDER: ${{ inputs.provider }}
+          ASAAS_SANDBOX_API_KEY: ${{ secrets.ASAAS_SANDBOX_API_KEY }}
+          MELHOR_ENVIO_SANDBOX_TOKEN: ${{ secrets.MELHOR_ENVIO_SANDBOX_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: mascavo-sandbox-results
+          path: test-results/reports/sandbox/
+          retention-days: 3
+          if-no-files-found: warn

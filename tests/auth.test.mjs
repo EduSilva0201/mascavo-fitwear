@@ -2,9 +2,9 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { chromium } from 'playwright';
+import { chromium } from './support/browser.mjs';
 import { mkdir } from 'node:fs/promises';
 
 const origin = 'http://127.0.0.1:8791';
@@ -14,8 +14,10 @@ const env = {
   WRANGLER_LOG_PATH: resolve('.wrangler/test-logs'),
   WRANGLER_SEND_METRICS: 'false',
   CI: 'true',
+  CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: 'false',
 };
-const cli = ['node_modules/wrangler/bin/wrangler.js'];
+for (const key of Object.keys(env)) if (/ASAAS|MELHOR_ENVIO|RESEND|CLOUDFLARE_API|CF_API|AWS_|SMTP/.test(key)) delete env[key];
+const cli = ['node_modules/wrangler/bin/wrangler.js','--config','tests/support/wrangler.test.jsonc'];
 let server,
   database,
   output = '';
@@ -66,7 +68,7 @@ before(async () => {
   assert.equal(assets.status, 0, assets.stderr);
   const migration = spawnSync(
     process.execPath,
-    [...cli, 'd1', 'migrations', 'apply', 'mascavo-local', '--local', '--persist-to', state],
+    [...cli, 'd1', 'migrations', 'apply', 'mascavo-tests-only', '--local', '--persist-to', state],
     { env, encoding: 'utf8' },
   );
   assert.equal(migration.status, 0, migration.stdout + migration.stderr);
@@ -204,15 +206,25 @@ test('login, rotação CSRF, token de sessão com hash, logout e revogação', a
     0,
   );
   assert.equal((await client.auth('session')).body.customer.emailVerified, true);
+  assert.equal((await new Client().call('/api/v1/integrations/status')).status, 401);
+  const integrationStatus = await client.call('/api/v1/integrations/status');
+  assert.equal(integrationStatus.body.sandbox, true);
+  assert.equal(JSON.stringify(integrationStatus.body).includes('API_KEY'), false);
+  assert.equal((await client.call('/api/v1/integrations/payments', {}, { 'X-CSRF-Token': '' })).status, 403);
+  assert.equal((await client.call('/api/v1/integrations/payments', { items: [], requestKey: crypto.randomUUID() })).status, 400);
+  const choice = { items: [{ id: 14, color: 'Preto', size: 'M', qty: 1 }], requestKey: crypto.randomUUID(), quoteId: crypto.randomUUID(), serviceId: '1', billingType: 'CREDIT_CARD', installments: 4 };
+  assert.equal((await client.call('/api/v1/integrations/payments',choice)).status,400);
+  assert.equal((await client.call('/api/v1/integrations/payments',{ ...choice, billingType: 'PIX', installments: 2 })).status,400);
+  assert.equal((await client.call('/api/v1/integrations/shipping/quote', { items: [], cep: '123' })).status, 400);
   const stolen = new Client();
   stolen.cookies = new Map(client.cookies);
   assert.equal((await client.auth('logout', {})).status, 200);
   assert.equal((await stolen.auth('session')).body.customer, null);
 });
-test('expiração de sessão e checkout sempre fechado', async () => {
+test('expiração de sessão e checkout exige dados completos', async () => {
   assert.equal((await client.call('/api/v1/orders', {})).status, 401);
   assert.equal((await client.auth('login', { email, password })).status, 200);
-  assert.equal((await client.call('/api/v1/orders', {})).status, 503);
+  assert.equal((await client.call('/api/v1/orders', {})).status, 400);
   database.prepare('UPDATE sessions SET idle_expires_at=0 WHERE revoked_at IS NULL').run();
   assert.equal((await client.auth('session')).body.customer, null);
 });
@@ -263,13 +275,13 @@ test('navegador: vitrine, sacola, cadastro, login, sessão persistente e logout'
     );
     await page.goto(origin);
     await page.waitForSelector('.product');
-    assert.equal(await page.locator('.product').count(), 8);
-    await page.locator('[data-card-color="1"][data-color="Cacau"]').click();
-    await page.locator('[data-card-size="1"][data-value="M"]').click();
-    await page.locator('[data-quick="1"]').click();
-    await page.locator('#cart-toggle').click();
-    assert.match(await page.locator('#cart-items').innerText(), /Cacau.*M/);
-    assert.equal(await page.locator('#cart-summary .primary').isDisabled(), true);
+    assert.equal(await page.locator('.product').count(), 6);
+    await page.locator('[data-card-color="14"][data-color="Vinho"]').click();
+    await page.locator('.product [data-open="14"]').first().click();
+    await page.locator('#product-dialog [data-size="M"]').click();
+    await page.locator('[data-add="14"]').click();
+    assert.match(await page.locator('#cart-items').innerText(), /Vinho.*M/);
+    assert.equal(await page.locator('[data-sandbox-payment]').isDisabled(), true);
     await page.locator('[data-qty="0"][data-delta="1"]').click();
     assert.equal(await page.locator('#count').innerText(), '2');
     await page.locator('#cart-dialog [data-close]').click();
@@ -302,7 +314,8 @@ test('navegador: vitrine, sacola, cadastro, login, sessão persistente e logout'
     await page.locator('#menu-toggle').click();
     assert.equal(await page.locator('#mobile-menu').isVisible(), true);
     await page.locator('#mobile-menu [data-menu-filter="Leggings"]').click();
-    assert.equal(await page.locator('.product').count(), 2);
+    assert.equal(await page.locator('.product').count(), 0);
+    assert.equal(await page.locator('#catalog-empty').isVisible(), true);
     await page.screenshot({ path: 'test-results/mobile.png', fullPage: true });
     // A tampered cart entry must not reach innerHTML.
     await page.evaluate(() =>
@@ -394,10 +407,10 @@ test('rail: side profiles, hover turn, closed-back views and mobile layout', asy
   assert.equal(await page.locator('.rail-shop-link').count(),0);
   await page.getByRole('button',{name:'Costas',exact:true}).click();
   assert.equal(await page.getByRole('button',{name:'Costas',exact:true}).getAttribute('aria-pressed'),'true');
-  assert.equal(await page.locator('header.navbar').evaluate(el=>el.inert),true);
+  assert.equal(await page.locator('header.navbar').evaluate(el=>!!el.closest('[inert]')),true);
   await page.keyboard.press('Escape');
   await page.waitForSelector('.rail-dialog',{state:'detached'});
-  assert.equal(await page.locator('header.navbar').evaluate(el=>el.inert),false);
+  assert.equal(await page.locator('header.navbar').evaluate(el=>!!el.closest('[inert]')),false);
   await page.setViewportSize({width:390,height:844});
   await first.focus(); await page.keyboard.press('Enter');
   await page.waitForSelector('.rail-dialog');
@@ -407,4 +420,305 @@ test('rail: side profiles, hover turn, closed-back views and mobile layout', asy
   await page.waitForSelector('.rail-dialog',{state:'detached'});
   assert.deepEqual(errors,[]);
  } finally {await browser.close();}
+});
+
+test('sandbox: sacola mostra testes e exige login antes de consultar provedores', async () => {
+  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(origin);
+    await page.evaluate(() => localStorage.setItem('mascavo-cart', JSON.stringify([{ id: 14, color: 'Preto', size: 'M', qty: 1 }])));
+    await page.reload();
+    await page.waitForSelector('.product');
+    await page.locator('#cart-toggle').click();
+    await page.locator('[name="sandbox-cep"]').fill('01001-000');
+    await page.locator('[data-sandbox-quote]').click();
+    await page.waitForFunction(() => document.querySelector('.sandbox-tests [role="status"]').textContent.includes('Entre na sua conta'));
+    assert.equal(await page.locator('#cart-summary > .primary').isDisabled(), true);
+    assert.equal(await page.locator('[data-sandbox-quote]').isEnabled(), true);
+  } finally { await browser.close(); }
+});
+
+test('checkout: seleciona frete, soma total e envia crédito em até 3x', async () => {
+  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  try {
+    const page = await browser.newPage();
+    let submitted;
+    await page.route('**/api/v1/integrations/shipping/quote', route => route.fulfill({ json: { quoteId: '11111111-1111-4111-8111-111111111111', expiresAt: Math.floor(Date.now()/1000)+600, subtotalCents: 17000, rates: [{ id: '1', name: 'PAC', company: 'Correios', priceCents: 2206, days: 5 },{ id: '2', name: 'SEDEX', company: 'Correios', priceCents: 4183, days: 2 }] } }));
+    await page.route('**/api/v1/auth/profile', route => route.fulfill({json:{profile:{},addresses:[{id:'22222222-2222-4222-8222-222222222222',label:'Casa',street:'Rua Teste',number:'1',cep:'04794000'}]}}));
+    await page.route('**/api/v1/orders', route => { submitted = route.request().postDataJSON(); return route.fulfill({ json: { orderId:'33333333-3333-4333-8333-333333333333',invoiceUrl: 'https://sandbox.asaas.com/i/test', amountCents: 19206 } }); });
+    await page.goto(origin);
+    await page.evaluate(() => localStorage.setItem('mascavo-cart',JSON.stringify([{ id:14, color:'Preto',size:'M',qty:1 }])));
+    await page.reload(); await page.waitForSelector('.product'); await page.locator('#cart-toggle').click();
+    assert.equal(await page.locator('[data-sandbox-payment]').isDisabled(),true);
+    await page.locator('[name="order-address"]').selectOption('22222222-2222-4222-8222-222222222222');
+    await page.locator('[name="sandbox-cep"]').fill('04794-000'); await page.locator('[data-sandbox-quote]').click();
+    await page.locator('[name="shipping-service"][value="1"]').check();
+    assert.match(await page.locator('.checkout-total').innerText(),/192,06/);
+    await page.locator('[name="billing-type"]').selectOption('CREDIT_CARD');
+    assert.equal(await page.locator('[name="installments"] option').count(),3);
+    await page.locator('[name="installments"]').selectOption('3'); await page.locator('[data-sandbox-payment]').click();
+    await page.locator('.sandbox-results a').waitFor();
+    assert.equal(submitted.billingType,'CREDIT_CARD'); assert.equal(submitted.installments,3); assert.equal(submitted.serviceId,'1');
+    assert.equal('amountCents' in submitted,false);
+    await page.locator('[name="billing-type"]').selectOption('PIX');
+    assert.equal(await page.locator('[name="installments"]').inputValue(),'1');
+    await page.locator('[name="sandbox-cep"]').fill('01001000');
+    assert.equal(await page.locator('[data-sandbox-payment]').isDisabled(),true);
+    assert.equal(await page.locator('.sandbox-results a').count(),0);
+  } finally { await browser.close(); }
+});
+
+test('modern dialogs: login, senha visível, cadastro e sacola responsivos', async () => {
+  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
+    const errors=[]; page.on('pageerror', e=>errors.push(e.message));
+    await page.goto(origin); await page.waitForSelector('.product');
+    await page.locator('#account-toggle').click();
+    await page.locator('.signin-card').waitFor();
+    await page.locator('#account-fields input[name="email"]').fill('cliente@example.test');
+    await page.locator('#account-fields input[name="password"]').fill('SenhaTeste123!');
+    await page.locator('.password-toggle').click();
+    assert.equal(await page.locator('#account-fields input[name="password"]').getAttribute('type'),'text');
+    await mkdir('test-results',{recursive:true});
+    await page.screenshot({path:'test-results/modern-login-desktop.png'});
+    await page.locator('[data-account-tab="register"]').click();
+    assert.equal(await page.locator('#account-fields input').count(),4);
+    await page.locator('[data-account-tab="login"]').click();
+    await page.setViewportSize({width:390,height:844});
+    const bounds=await page.locator('#account-dialog').boundingBox();
+    assert.ok(bounds.x>=0 && bounds.x+bounds.width<=391);
+    await page.screenshot({path:'test-results/modern-login-mobile.png'});
+    await page.locator('#account-dialog [data-close]').click();
+    await page.evaluate(()=>localStorage.setItem('mascavo-cart',JSON.stringify([{id:14,color:'Preto',size:'M',qty:1}])));
+    await page.reload();await page.waitForSelector('.product');await page.locator('#cart-toggle').click();
+    await page.locator('[name="billing-type"]').selectOption('CREDIT_CARD');
+    await page.locator('#cart-dialog').evaluate(async el => { await Promise.all(el.getAnimations().map(animation => animation.finished)); });
+    const bag=await page.locator('#cart-dialog').boundingBox();
+    assert.ok(bag.x>=0 && bag.x+bag.width<=391);
+    await page.screenshot({path:'test-results/modern-bag-mobile.png'});
+    assert.deepEqual(errors,[]);
+  } finally {await browser.close();}
+});
+
+test('admin: autoriza por papel, gerencia produto, estoque, imagens e configuracoes', async () => {
+  const staff=new Client();await staff.init();
+  const staffEmail='admin@example.test';
+  assert.equal((await staff.auth('register',{name:'Gestora Teste',email:staffEmail,password})).status,202);
+  database.prepare('UPDATE customers SET email_verified_at=? WHERE email=?').run(Math.floor(Date.now()/1000),staffEmail);
+  assert.equal((await staff.auth('login',{email:staffEmail,password})).status,200);
+  assert.equal((await staff.call('/api/v1/admin/catalog')).status,403);
+  database.prepare("UPDATE customers SET role='admin' WHERE email=?").run(staffEmail);
+  assert.equal((await staff.call('/api/v1/admin/session')).status,200);
+  assert.equal((await new Client().call('/api/v1/admin/catalog')).status,401);
+  const catalog=await staff.call('/api/v1/admin/catalog');assert.equal(catalog.status,200);
+  const original=catalog.body.products[0];
+  const body={name:'Produto Admin Teste',category:original.category,description:'Descricao de teste',price_cents:12345,active:true,provisional:false,sort_order:99,variants:[{color:'Preto',size:'M',stock:1,image_url:original.variants[0].image_url}],images:[{src:original.images[0].src,label:'Frente',color:'Preto'}]};
+  assert.equal((await staff.call('/api/v1/admin/products/new',body,{'X-CSRF-Token':''})).status,403);
+  assert.equal((await staff.call('/api/v1/admin/products/new',{...body,name:'<script>bad</script>'})).status,400);
+  const saved=await staff.call('/api/v1/admin/products/new',body);assert.equal(saved.status,200);
+  const id=saved.body.id;
+  const publicProduct=(await staff.call('/api/v1/catalog')).body.products.find(p=>p.id===id);
+  assert.equal(publicProduct.priceCents,12345);assert.equal(publicProduct.stock.Preto.M,1);
+  assert.equal((await staff.call('/api/v1/admin/products/'+id,{...body,revision:'stale'})).status,409);
+  assert.equal(database.prepare('SELECT stock FROM catalog_variants WHERE product_id=?').get(id).stock,1);
+  const changed=await staff.call('/api/v1/admin/products/'+id,{...body,revision:saved.body.revision,active:false,variants:[{...body.variants[0],stock:0}]});assert.equal(changed.status,200);
+  assert.equal((await staff.call('/api/v1/catalog')).body.products.some(p=>p.id===id),false);
+  assert.equal((await staff.call('/api/v1/admin/categories',{name:'Novidades'})).status,200);
+  assert.equal((await staff.call('/api/v1/admin/categories/manage',{name:'Novidades',action:'rename',newName:'Lancamentos'})).status,200);
+  assert.equal((await staff.call('/api/v1/admin/categories/manage',{name:original.category,action:'delete'})).status,409);
+  assert.equal((await staff.call('/api/v1/admin/categories/manage',{name:'Lancamentos',action:'delete'})).status,200);
+  const settings=(await staff.call('/api/v1/admin/settings')).body;
+  const settingsData={storeName:'Mascavo Teste',tagline:'Seu movimento',contactEmail:'',whatsapp:'',instagram:'',announcement:'Colecao de teste'};
+  assert.equal((await staff.call('/api/v1/admin/settings',{data:settingsData,revision:settings.revision})).status,200);
+  assert.equal((await staff.call('/api/v1/admin/settings',{data:settingsData,revision:settings.revision})).status,409);
+  assert.equal((await staff.call('/api/v1/store')).body.settings.storeName,'Mascavo Teste');
+  const cookies=[...staff.cookies].map(([k,v])=>k+'='+v).join('; ');
+  const png=readFileSync('assets/brand/mascavo-logo.png');
+  const upload=await fetch(origin+'/api/v1/admin/media',{method:'POST',headers:{Cookie:cookies,Origin:origin,'X-CSRF-Token':staff.csrf,'Content-Type':'image/png'},body:png});
+  assert.equal(upload.status,201);const media=await upload.json();
+  const photo=await fetch(origin+media.src);assert.equal(photo.status,200);assert.equal(photo.headers.get('Content-Type'),'image/png');assert.equal((await photo.arrayBuffer()).byteLength,png.byteLength);
+  const invalid=await fetch(origin+'/api/v1/admin/media',{method:'POST',headers:{Cookie:cookies,Origin:origin,'X-CSRF-Token':staff.csrf,'Content-Type':'image/png'},body:'<script>not an image</script>'});assert.equal(invalid.status,400);
+  const browser=await chromium.launch({channel:'chrome',headless:true});
+  try{
+    const context=await browser.newContext({viewport:{width:1440,height:1000}});
+    await context.addCookies([...staff.cookies].map(([name,value])=>({name,value,url:origin})));
+    const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    await page.goto(origin+'/admin');await page.locator('#admin-shell:not([hidden])').waitFor();
+    await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/admin-overview.png'});
+    await page.locator('.sidebar [data-page="products"]').click();await page.locator('[data-edit]').first().click();
+    await page.locator('#editor[open]').waitFor();await page.locator('[name="name"]').fill('Edicao sem salvar');
+    await page.locator('#editor [data-close]').first().click();await page.locator('#confirm-dialog[open]').waitFor();await page.locator('#keep-editing').click();
+    assert.equal(await page.locator('[name="name"]').inputValue(),'Edicao sem salvar');
+    await page.screenshot({path:'test-results/admin-editor.png'});
+    await page.locator('#editor [data-close]').first().click();await page.locator('#discard-editing').click();
+    await page.locator('.sidebar [data-page="settings"]').click();
+    await page.locator('[name="shippingOriginCep"]').fill('73060604');
+    await page.locator('[name="shippingWeightKg"]').fill('0.3');
+    await page.locator('#settings-form button').click();
+    await page.waitForFunction(()=>document.querySelector('#notification').textContent.includes('aplicadas'));
+    assert.equal((await staff.call('/api/v1/store')).body.settings.shippingOriginCep,'73060604');
+    await page.locator('.sidebar [data-page="orders"]').click();
+    await page.locator('#commerce-orders').waitFor();
+    await page.locator('.sidebar [data-page="fulfillment"]').click();
+    await page.locator('#sender-form').waitFor();
+    for (const [key,value] of Object.entries({name:'Mascavo Teste',company_document:'12345678000195',state_register:'123456789',phone:'61999999999',email:'loja@example.test',postal_code:'73060604',address:'Rua Teste',number:'1',district:'Centro',city:'Brasilia',state_abbr:'DF'}))
+      await page.locator('#sender-form [name="'+key+'"]').fill(value);
+    await page.locator('#sender-form button').click();
+    await page.waitForFunction(()=>document.querySelector('#notification').textContent==='Remetente salvo.');
+    for (const [key,value] of Object.entries({weight:'0.3',width:'20',height:'4',length:'25'})) await page.locator('#package-form [name="'+key+'"]').fill(value);
+    await page.locator('#package-form button').click();
+    await page.waitForFunction(()=>document.querySelector('#notification').textContent.includes('Peso e medidas salvos'));
+    await page.screenshot({path:'test-results/admin-fulfillment.png'});
+    await page.locator('.sidebar [data-page="order-mail"]').click();
+    await page.getByRole('heading',{name:'E-mails de teste',exact:true}).waitFor();
+    await page.locator('.sidebar [data-page="products"]').click();
+    await page.setViewportSize({width:390,height:844});await page.screenshot({path:'test-results/admin-mobile.png'});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    assert.deepEqual(errors,[]);
+  }finally{await browser.close();}
+  database.prepare("UPDATE customers SET role='customer' WHERE email=?").run(staffEmail);
+  assert.equal((await staff.call('/api/v1/admin/catalog')).status,403);
+});
+
+test('preloader: initial entry, reload, mobile, image failures, reduced motion and fail-safe', async t => {
+  const browser=await chromium.launch({channel:'chrome',headless:true});
+  try {
+    await t.test('first visit measures real resources and blocks hidden controls',async()=>{
+      const context=await browser.newContext({viewport:{width:1440,height:900}}),page=await context.newPage();
+      const errors=[];page.on('pageerror',e=>errors.push(e.message));
+      let release;const hold=new Promise(resolve=>release=resolve);
+      await page.route('**/assets/campaign/movimento-logo.jpg',async route=>{await hold;await route.continue().catch(()=>{});});
+      await page.goto(origin,{waitUntil:'domcontentloaded'});
+      await page.waitForFunction(()=>document.querySelector('.preloader-track')?.getAttribute('aria-valuenow')==='2');
+      assert.equal(await page.locator('#storefront').evaluate(el=>el.inert),true);
+      assert.equal(await page.locator('#preloader').isVisible(),true);
+      assert.equal(await page.locator('.preloader-track').getAttribute('aria-valuemax'),'3');
+      await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/preloader-desktop.png'});
+      release();await page.waitForFunction(()=>!document.documentElement.classList.contains('preloader-active'));
+      assert.equal(await page.locator('#storefront').evaluate(el=>el.inert),false);
+      assert.equal(await page.locator('.campaign-slide.is-active').isVisible(),true);
+      await page.reload({waitUntil:'domcontentloaded'});
+      assert.equal(await page.locator('html').evaluate(el=>el.classList.contains('preloader-active')),false);
+      // Returning from another same-tab page also skips the entrance.
+      await page.goto(origin+'/admin',{waitUntil:'domcontentloaded'});await page.goto(origin,{waitUntil:'domcontentloaded'});
+      assert.equal(await page.locator('html').evaluate(el=>el.classList.contains('preloader-active')),false);
+      assert.deepEqual(errors,[]);await context.close();
+    });
+    await t.test('mobile: keyboard can skip without entering hidden content',async()=>{
+      const context=await browser.newContext({viewport:{width:390,height:844}}),page=await context.newPage();
+      await page.route('**/assets/campaign/movimento-logo.jpg',()=>{});
+      await page.goto(origin,{waitUntil:'domcontentloaded'});await page.keyboard.press('Tab');
+      assert.equal(await page.locator('#preloader-skip').evaluate(el=>el===document.activeElement),true);
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+      await page.screenshot({path:'test-results/preloader-mobile.png'});
+      await page.keyboard.press('Enter');await page.waitForFunction(()=>!document.documentElement.classList.contains('preloader-active'));
+      assert.equal(await page.locator('.brand-image').evaluate(el=>el===document.activeElement),true);
+      await context.close();
+    });
+    await t.test('broken logo and hero do not prevent revealing the page',async()=>{
+      const context=await browser.newContext(),page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+      await page.route('**/assets/brand/mascavo-logo.png',route=>route.abort('failed'));
+      await page.route('**/assets/campaign/movimento-logo.jpg',route=>route.abort('failed'));
+      await page.goto(origin,{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>!document.documentElement.classList.contains('preloader-active'));
+      assert.equal(await page.locator('#storefront').evaluate(el=>el.inert),false);assert.deepEqual(errors,[]);await context.close();
+    });
+    await t.test('watchdog unlocks the site if the preloader script never loads',async()=>{
+      const context=await browser.newContext(),page=await context.newPage();
+      await page.route('**/preloader.js',route=>route.abort('failed'));
+      const started=Date.now();await page.goto(origin,{waitUntil:'domcontentloaded'});
+      await page.waitForFunction(()=>!document.documentElement.classList.contains('preloader-active'),{},{timeout:6000});
+      assert.ok(Date.now()-started<6000);assert.equal(await page.locator('#storefront').evaluate(el=>el.inert),false);await context.close();
+    });
+    await t.test('reduced motion removes entrance and exit animations',async()=>{
+      const context=await browser.newContext({reducedMotion:'reduce',viewport:{width:768,height:1024}}),page=await context.newPage();
+      let release;const hold=new Promise(resolve=>release=resolve);
+      await page.route('**/assets/campaign/movimento-logo.jpg',async route=>{await hold;await route.continue().catch(()=>{});});
+      await page.goto(origin,{waitUntil:'domcontentloaded'});
+      assert.equal(await page.locator('.preloader-brand').evaluate(el=>getComputedStyle(el).animationName),'none');
+      assert.equal(await page.locator('#preloader').evaluate(el=>getComputedStyle(el).transitionDuration),'0s');
+      release();await page.waitForFunction(()=>!document.documentElement.classList.contains('preloader-active'));await context.close();
+    });
+    await t.test('unavailable storage does not break the page',async()=>{
+      const context=await browser.newContext(),page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+      await page.addInitScript(()=>Object.defineProperty(window,'sessionStorage',{get(){throw new DOMException('Storage unavailable','SecurityError');}}));
+      await page.goto(origin,{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>!document.documentElement.classList.contains('preloader-active'));
+      assert.equal(await page.locator('#storefront').evaluate(el=>el.inert),false);assert.deepEqual(errors,[]);await context.close();
+    });
+    await t.test('product images do not block entry and the hero slider still advances',async()=>{
+      const context=await browser.newContext(),page=await context.newPage();
+      await page.route('**/assets/products/**',()=>{});
+      const started=Date.now();await page.goto(origin,{waitUntil:'domcontentloaded'});
+      await page.waitForFunction(()=>!document.documentElement.classList.contains('preloader-active'));
+      assert.ok(Date.now()-started<3500);
+      await page.waitForFunction(()=>document.querySelectorAll('.campaign-slide')[1].classList.contains('is-active'),{},{timeout:6500});
+      await context.close();
+    });
+    await t.test('JavaScript disabled leaves content visible and accessible',async()=>{
+      const context=await browser.newContext({javaScriptEnabled:false}),page=await context.newPage();await page.goto(origin);
+      assert.equal(await page.locator('#preloader').isVisible(),false);assert.equal(await page.locator('.campaign-slide.is-active').isVisible(),true);
+      assert.equal(await page.locator('#storefront').evaluate(el=>el.hasAttribute('inert')),false);await context.close();
+    });
+  }finally{await browser.close();}
+});
+
+test('editorial: admin publica depoimentos e FAQ com visual acessivel na loja',async()=>{
+  const staff=new Client();await staff.init();const staffEmail='editorial@example.test';
+  assert.equal((await staff.auth('register',{name:'Editora Teste',email:staffEmail,password})).status,202);
+  database.prepare("UPDATE customers SET role='admin',email_verified_at=? WHERE email=?").run(Math.floor(Date.now()/1000),staffEmail);
+  assert.equal((await staff.auth('login',{email:staffEmail,password})).status,200);
+  const browser=await chromium.launch({channel:'chrome',headless:true});
+  try{
+    const context=await browser.newContext({viewport:{width:1440,height:1000}});
+    await context.addCookies([...staff.cookies].map(([name,value])=>({name,value,url:origin})));
+    const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
+    await page.goto(origin+'/admin');await page.locator('#admin-shell:not([hidden])').waitFor();
+    await page.locator('.sidebar [data-page="testimonials"]').click();await page.locator('#new-content').click();
+    await page.locator('#content-fields [name="author_name"]').fill('Cliente de teste');
+    await page.locator('#content-fields [name="author_detail"]').fill('Depoimento ficticio apenas no teste');
+    await page.locator('#content-fields [name="quote"]').fill('Conforto e liberdade em cada movimento.');
+    await page.locator('#content-fields [name="rating"]').selectOption('5');
+    await page.locator('#content-save').click();await page.locator('#content-editor').waitFor({state:'hidden'});
+    let data=(await staff.call('/api/v1/content')).body;assert.equal(data.testimonials.length,0);
+    await page.locator('[data-content-edit]').first().click();await page.locator('#content-fields [name="published"]').check();
+    await page.locator('#content-save').click();await page.locator('#content-editor').waitFor({state:'hidden'});
+    data=(await staff.call('/api/v1/content')).body;assert.equal(data.testimonials.length,1);
+    assert.equal((await staff.call('/api/v1/admin/content/testimonials/new',{author_name:'Outra cliente de teste',author_detail:'Exemplo somente no teste',quote:'Uma experiencia feita de cuidado e detalhes.',avatar_url:'',rating:null,published:true,sort_order:1})).status,200);
+    await page.screenshot({path:'test-results/admin-testimonials.png'});
+    await page.goto(origin);await page.locator('#testimonials-root .testimonial-card').first().waitFor();
+    assert.equal(await page.locator('.shop-nav a[href="#depoimentos"]').isVisible(),true);
+    await page.locator('#depoimentos').scrollIntoViewIfNeeded();await page.locator('.testimonial-pause').click();
+    assert.equal(await page.locator('.testimonial-pause').getAttribute('aria-pressed'),'true');
+    assert.equal(await page.locator('.testimonials-track').evaluate(el=>getComputedStyle(el).animationPlayState),'paused');
+    assert.equal(await page.locator('.testimonials-copy').getAttribute('aria-hidden'),'true');
+    await page.locator('#depoimentos').screenshot({path:'test-results/testimonials-desktop.png'});
+    await page.goto(origin+'/admin');await page.locator('.sidebar [data-page="faq"]').click();await page.locator('#new-content').click();
+    await page.locator('#content-fields [name="question"]').fill('Como cuidar da peca de teste?');
+    await page.locator('#content-fields [name="answer"]').fill('Confira a etiqueta da peca.\nSiga as instrucoes do fabricante.');
+    await page.locator('#content-fields [name="category"]').fill('Cuidados');await page.locator('#content-fields [name="published"]').check();
+    await page.locator('#content-save').click();await page.locator('#content-editor').waitFor({state:'hidden'});
+    await page.goto(origin+'/duvidas-frequentes');await page.locator('#faq-list details').first().waitFor();
+    assert.equal(await page.locator('#faq-retry').isVisible(),false);
+    await page.locator('#faq-search').fill('cuidar');assert.equal(await page.locator('#faq-list details').count(),1);
+    await page.locator('#faq-list summary').click();assert.match(await page.locator('.faq-answer').innerText(),/fabricante/);
+    await page.screenshot({path:'test-results/faq-desktop.png',fullPage:true});
+    await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    await page.screenshot({path:'test-results/faq-mobile.png',fullPage:true});
+    await page.goto(origin);await page.locator('#testimonials-root .testimonial-card').first().waitFor();
+    assert.equal(await page.locator('.testimonials-track').evaluate(el=>getComputedStyle(el).animationName),'none');
+    await page.locator('#menu-toggle').click();await page.locator('#mobile-menu a[href="#depoimentos"]').click();
+    assert.equal(await page.locator('#mobile-menu').isVisible(),false);assert.equal(new URL(page.url()).hash,'#depoimentos');
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    const reduced=await browser.newContext({reducedMotion:'reduce'}),reducedPage=await reduced.newPage();
+    await reducedPage.goto(origin);await reducedPage.locator('#testimonials-root .testimonial-card').first().waitFor();
+    assert.equal(await reducedPage.locator('.testimonials-track').evaluate(el=>getComputedStyle(el).animationName),'none');
+    assert.deepEqual(errors,[]);
+    database.exec(readFileSync('backend/seeds/testimonials-demo.sql','utf8'));
+    await page.reload();await page.locator('#depoimentos').scrollIntoViewIfNeeded();
+    await page.locator('.testimonial-avatar img').evaluateAll(images=>images.forEach(img=>img.loading='eager'));
+    await page.waitForFunction(()=>[...document.querySelectorAll('.testimonial-avatar img')].some(img=>img.src.endsWith('avatar-ana.svg')&&img.naturalWidth>0));
+    assert.match(await page.locator('#depoimentos').innerText(),/Depoimento fictício/);
+    await page.locator('#depoimentos').screenshot({path:'test-results/testimonials-demo-mobile.png'});
+  }finally{await browser.close();}
 });

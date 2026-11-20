@@ -1,0 +1,128 @@
+#preloader {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    transform 520ms cubic-bezier(0.76, 0, 0.24, 1),
+    opacity 520ms ease;
+}
+.preloader-inner {
+  width: min(76vw, 330px);
+  text-align: center;
+}
+.preloader-brand {
+  animation: mascavo-brand-arrive 380ms ease-out both;
+}
+#preloader-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+#preloader-logo[hidden] {
+  display: none;
+}
+.preloader-wordmark {
+  display: block;
+  font:
+    400 clamp(30px, 8vw, 44px)/1.2 Georgia,
+    serif;
+  letter-spacing: 0.12em;
+  color: #f2d7b6;
+}
+.preloader-wordmark[hidden] {
+  display: none;
+}
+.preloader-wordmark small {
+  display: block;
+  margin-top: 13px;
+  padding-left: 0.5em;
+  font:
+    9px/1.4 Arial,
+    sans-serif;
+  letter-spacing: 0.5em;
+  color: #bf8b5e;
+}
+.preloader-track {
+  width: 145px;
+  height: 1px;
+  margin: 35px auto 0;
+  overflow: hidden;
+  background: #bf8b5e2e;
+}
+.preloader-track > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #bf8b5e, #f2d7b6);
+  transform-origin: left;
+  transform: scaleX(var(--entry-progress, 0));
+  transition: transform 160ms ease-out;
+}
+.preloader-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+#preloader-skip {
+  position: absolute;
+  bottom: max(30px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 18px;
+  border: 1px solid #bf8b5e70;
+  border-radius: 30px;
+  background: #40210f;
+  color: #f2d7b6;
+  font:
+    11px Arial,
+    sans-serif;
+  opacity: 0;
+}
+#preloader-skip:focus-visible {
+  opacity: 1;
+  outline: 1px solid #f2d7b6;
+  outline-offset: 5px;
+}
+html.preloader-active #preloader.is-leaving {
+  transform: translateY(-100%);
+  opacity: 0.8;
+  pointer-events: none;
+}
+/* Reveal behind the curtain; JS keeps the content inert until the exit ends. */
+html.preloader-active.preloader-revealing #storefront {
+  visibility: visible;
+}
+@keyframes mascavo-brand-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 520px) {
+  .preloader-inner {
+    width: min(72vw, 280px);
+  }
+  .preloader-track {
+    width: 120px;
+    margin-top: 29px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #preloader {
+    transition: none;
+  }
+  .preloader-brand {
+    animation: none;
+  }
+  .preloader-track > span {
+    transition: none;
+  }
+}

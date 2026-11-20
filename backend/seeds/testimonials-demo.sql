@@ -1,0 +1,5 @@
+-- Demonstration content, explicitly labeled. Never replaces edited records.
+INSERT OR IGNORE INTO editorial_testimonials(id,author_name,author_detail,quote,avatar_url,rating,published,sort_order,revision,updated_at) VALUES
+('11111111-1111-4111-8111-111111111101','Ana Martins','Depoimento fictício · demonstração','O conjunto acompanha meus movimentos e combina com a rotina que gosto de levar: treino, uma caminhada e um café depois.','assets/testimonials/avatar-ana.svg',5,1,0,'demo-v1',0),
+('11111111-1111-4111-8111-111111111102','Beatriz Oliveira','Depoimento fictício · demonstração','Gosto de peças que unem conforto e personalidade. As cores e os detalhes deixam o look bonito sem esforço.','assets/testimonials/avatar-beatriz.svg',5,1,1,'demo-v1',0),
+('11111111-1111-4111-8111-111111111103','Camila Rocha','Depoimento fictício · demonstração','A proposta da Mascavo tem tudo a ver comigo: praticidade para me movimentar e um visual que vai além da academia.','assets/testimonials/avatar-camila.svg',5,1,2,'demo-v1',0);

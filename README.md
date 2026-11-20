@@ -1,5 +1,52 @@
 # Mascavo Fitwear
 
+## Demonstração
+
+Loja virtual de moda fitness com vitrine responsiva, catálogo de produtos, sacola e painel administrativo. As imagens abaixo são capturas do ambiente local de desenvolvimento; preços, estoque e informações de teste são ilustrativos. Pagamentos e fretes continuam em sandbox.
+
+### Vitrine no computador
+
+Página inicial com a identidade visual da Mascavo, campanha e navegação da loja.
+
+![Página inicial da Mascavo no computador, com campanha em tons de creme e marrom](docs/demo/loja-desktop.png)
+
+### Catálogo de produtos
+
+Exibição das peças com fotos, opções de cores, tamanhos e preços.
+
+![Catálogo com conjuntos e macaquinho, miniaturas de fotos e opções de cores](docs/demo/catalogo.png)
+
+### Experiência no celular
+
+Página inicial e sacola com consulta de entrega e pagamento de teste.
+
+<p>
+  <img src="docs/demo/loja-mobile.png" alt="Página inicial da Mascavo adaptada ao celular" width="300" />
+  <img src="docs/demo/sacola-mobile.png" alt="Sacola no celular com produto selecionado, subtotal e formulário de entrega em sandbox" width="300" />
+</p>
+
+### Painel administrativo
+
+Visão geral com indicadores e navegação para gestão de produtos, estoque, conteúdo e pedidos. Os dados exibidos pertencem ao ambiente de testes.
+
+![Painel administrativo da Mascavo com indicadores de produtos e estoque e menu de gestão](docs/demo/painel-admin.png)
+
+Para explorar o projeto, siga as instruções em [Executar localmente](#executar-localmente). As capturas ficam em [`docs/demo`](docs/demo) para serem exibidas diretamente no GitHub.
+
+Conteúdo editorial: a seção de depoimentos na página inicial e a página `/duvidas-frequentes` são gerenciadas no painel, nas áreas **Depoimentos** e **Dúvidas frequentes**. Cadastros novos ficam em rascunho até marcar publicação. Consulte [ADMIN.md](ADMIN.md).
+
+## Entrada da loja
+
+A página inicial usa a logo oficial em um preloader breve, exibido uma vez por sessão da aba (`mascavo:entry:v1` no sessionStorage). Recarregar ou retornar à loja na mesma aba não repete a animação. Para rever, abra uma sessão nova ou remova somente essa chave no DevTools.
+
+A linha acompanha a conclusão de três verificações: documento, logo e primeira imagem da campanha (incluindo decodificação). Não representa porcentagem de bytes e não espera imagens dos produtos. A entrada da logo dura 380 ms e a cortina de saída 520 ms, sem espera mínima adicional. Um watchdog independente libera o conteúdo em até 3,5 s mesmo se `preloader.js` falhar. Movimento reduzido elimina animações; Escape e o botão acessível por Tab permitem pular. Sem JavaScript, o conteúdo continua visível. Sem armazenamento, a entrada funciona sem persistir a preferência.
+
+Arquivos: `preloader.css`, `preloader.js` e o bootstrap de segurança em `index.html`. Teste visual isolado: `node --test --test-name-pattern="^preloader:" tests/auth.test.mjs`.
+
+Testes automatizados: execute `npm.cmd run check`. Comandos por integração, relatórios HTML, cobertura, sandbox opt-in e GitHub Actions estão documentados em [TESTING.md](TESTING.md). Pendências de funcionalidades ainda não implementadas aparecem separadas dos testes aprovados.
+
+Painel administrativo: acesse `/admin` no servidor local. Veja [ADMIN.md](ADMIN.md) para habilitar a conta administradora e gerenciar produtos, variantes, estoque, imagens, categorias e configurações da loja.
+
 Loja de moda fitness com frontend HTML/CSS/JavaScript e primeiro módulo de backend local em Cloudflare Workers + D1. R2 está configurado como binding local para a futura etapa de imagens.
 
 ## Identidade visual
@@ -84,7 +131,7 @@ wrangler.jsonc                      bindings locais de Workers, D1 e R2
 1. Catálogo em D1: categorias, produtos, cores, tamanhos, SKUs e preços em centavos; imagens no R2.
 2. Carrinho no servidor, estoque por variante e reservas transacionais.
 3. Pedidos autenticados com preços/estoque validados no servidor e histórico dos itens.
-4. Mercado Pago e Melhor Envio em testes, com idempotência, webhooks e reconciliação.
+4. Asaas e Melhor Envio: concluir pedidos, webhooks e reconciliação após os testes de sandbox.
 5. Administração com autorização própria e MFA, serviço real de e-mail, auditoria e recuperação de dados.
 6. Homologação e revisão de segurança e desempenho na Cloudflare. Publicação somente com autorização explícita.
 
@@ -117,3 +164,28 @@ A estrutura shadcn esta definida em `components.json`, com alias `@/components/u
 O Tailwind gera apenas tema e utilitarios, sem Preflight, para preservar os estilos legados. `npm.cmd run assets:prepare` compila React e CSS para `dist/public/assets/rail-ui/` com esbuild e Tailwind. `npm.cmd run dev` ja executa essa preparacao. Apos editar TSX/CSS da arara, execute `npm.cmd run assets:prepare` novamente ou reinicie o servidor; nao ha watcher TSX separado.
 
 `npm.cmd run typecheck` valida backend e frontend. Teste isolado: `node --test --test-name-pattern="rail:|catalog:|profile:" tests/auth.test.mjs`.
+
+## Integrações sandbox: Asaas e Melhor Envio
+
+1. Preencha `.dev.vars` (use `.dev.vars.example` como referência). Use somente chaves geradas nas contas sandbox. Não compartilhe chaves no chat ou no GitHub.
+2. Configure o CEP de origem, o User-Agent com seu contato e as medidas/peso unitários para simulações. As medidas são iguais para todos os produtos nesta etapa.
+3. Execute `npm.cmd run db:migrate` e `npm.cmd run dev`. Reinicie o servidor após mudar credenciais.
+4. Entre na conta local da loja, adicione produtos à sacola e abra **Entrega e pagamento**. O usuário da loja é independente dos logins dos provedores.
+5. Consulte o frete pelo CEP. Para gerar uma fatura sandbox Asaas, preencha antes um CPF de teste válido em **Minha conta**. O link da fatura permite escolher os meios habilitados na conta sandbox.
+
+A sacola cria pedidos Sandbox com produtos e frete calculados no servidor. O navegador não define os valores cobrados. Escritas exigem sessão, origem e CSRF válidos. Hosts dos provedores são fixados em Sandbox. A expedição depende de pagamento conciliado, remetente, dimensões verificadas e nota fiscal.
+
+Uma chave identifica cada tentativa e é persistida no pedido. A mesma chave não cria outra cobrança. Em falhas ou timeout, consulte Meus pedidos e o painel Asaas antes de iniciar outra compra. Clientes Asaas são criados com notificações do provedor desativadas; os e-mails de pedidos ficam na caixa local de testes.
+
+Endpoints: `GET /api/v1/integrations/status`, `POST /api/v1/integrations/shipping/quote` (`items`, `cep`) e `POST /api/v1/integrations/payments` (`items`, `requestKey`). Cada item contém `id`, `color`, `size`, `qty`. A migração `0006_sandbox_payments.sql` registra tentativas de cobrança. Testes dos clientes HTTP: `node --test tests/integrations.test.mjs` (Node 26).
+
+O checkout atual cria pedidos com reserva de estoque, total incluindo frete, conciliação de pagamento e expedição Melhor Envio. Os webhooks são publicados pelo proxy restrito do Cloudflare Tunnel. Consulte [COMMERCE-SANDBOX.md](COMMERCE-SANDBOX.md) para operar, cadastrar dados fiscais e configurar o aplicativo. Produção permanece desabilitada; e-mails usam caixa local.
+
+Referências: https://docs.asaas.com/reference/criar-nova-cobranca e https://docs.melhorenvio.com.br/reference/calculo-de-fretes-por-produtos.
+
+
+### Escolhas de entrega e pagamento
+
+A migra??o `0007_checkout_choices.sql` armazena cota??es por cliente por dez minutos. O cliente escolhe o servi?o e v? o total com frete; qualquer mudan?a no CEP exige nova consulta. Altera??es de itens, variantes, quantidades ou pre?os invalidam a cota??o no servidor. A cobran?a usa apenas o pre?o do frete salvo no banco, nunca um valor enviado pelo navegador.
+
+`POST /api/v1/integrations/payments` exige `items`, `requestKey`, `quoteId`, `serviceId`, `billingType` (`PIX`, `BOLETO`, `CREDIT_CARD`) e `installments` (1 a 3; Pix/boleto apenas 1). No cart?o parcelado, enviamos ao Asaas `installmentCount` e `totalValue`, preservando o total em centavos. O Asaas faz o ajuste final de arredondamento. Os dados do cart?o continuam sendo preenchidos na fatura segura do Asaas. A chave de tentativa fica vinculada ?s escolhas originais.
