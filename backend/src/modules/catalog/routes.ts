@@ -1,5 +1,7 @@
 ﻿import { Hono } from 'hono';
 import type { Env } from '../../env';
+import { isProduction, PILOT_PRODUCT_ID } from '../../commerce-environment';
+import { isCheckoutPilot } from '../../checkout-pilot';
 
 type Product = { id: number; name: string; category: string; description: string; price_cents: number; provisional: number };
 type Variant = { product_id: number; color: string; size: string; stock: number; image_url: string; color_hex: string | null };
@@ -7,12 +9,15 @@ type Image = { product_id: number; src: string; label: string; color: string | n
 const catalog = new Hono<{ Bindings: Env }>();
 catalog.get('/', async (c) => {
   const category = c.req.query('category');
+  const provisional = isProduction(c.env) ? 0 : 1;
   if (category && category.length > 80) return c.json({ error: 'Categoria invalida.' }, 400);
+  const pilot = await isCheckoutPilot(c);
+  const visibility = pilot ? 'p.id=?' : 'p.id<>?';
   const results = await c.env.DB.batch([
     c.env.DB.prepare('SELECT name FROM catalog_categories ORDER BY sort_order'),
-    c.env.DB.prepare('SELECT id,name,category,description,price_cents,provisional FROM catalog_products WHERE active=1 AND (? IS NULL OR category=?) ORDER BY sort_order').bind(category ?? null, category ?? null),
-    c.env.DB.prepare('SELECT v.* FROM catalog_variants v JOIN catalog_products p ON p.id=v.product_id WHERE p.active=1 ORDER BY v.sort_order'),
-    c.env.DB.prepare('SELECT i.* FROM catalog_images i JOIN catalog_products p ON p.id=i.product_id WHERE p.active=1 ORDER BY i.sort_order'),
+    c.env.DB.prepare(`SELECT id,name,category,description,price_cents,provisional FROM catalog_products p WHERE active=1 AND provisional<=? AND ${visibility} AND (? IS NULL OR category=?) ORDER BY sort_order`).bind(provisional, PILOT_PRODUCT_ID, category ?? null, category ?? null),
+    c.env.DB.prepare(`SELECT v.* FROM catalog_variants v JOIN catalog_products p ON p.id=v.product_id WHERE p.active=1 AND p.provisional<=? AND ${visibility} ORDER BY v.sort_order`).bind(provisional, PILOT_PRODUCT_ID),
+    c.env.DB.prepare(`SELECT i.* FROM catalog_images i JOIN catalog_products p ON p.id=i.product_id WHERE p.active=1 AND p.provisional<=? AND ${visibility} ORDER BY i.sort_order`).bind(provisional, PILOT_PRODUCT_ID),
   ]);
   const categories = (results[0].results as { name: string }[]).map(row => row.name);
   if (category && !categories.includes(category)) return c.json({ error: 'Categoria nao encontrada.' }, 404);

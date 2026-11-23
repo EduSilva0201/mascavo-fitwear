@@ -79,7 +79,7 @@ export function TestimonialsSection({ testimonials }: { testimonials: Entry[] })
         </div>
       )}
       <a className="editorial-link" href="/duvidas-frequentes">
-        Ficou com alguma dúvida? <span aria-hidden="true">↗</span>
+        Ficou com alguma dúvida? <span className="storefront-arrow" aria-hidden="true" />
       </a>
     </section>
   );

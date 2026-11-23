@@ -2,19 +2,22 @@ import type { Env } from '../../env';
 
 // This helper never exports credentials through routes, diagnostics or logs.
 export async function shippingToken(env: Env): Promise<string | undefined> {
-  if (!env.MELHOR_ENVIO_REFRESH_TOKEN || !env.MELHOR_ENVIO_TOKEN_EXPIRES_AT)
+  const seeded = env.MELHOR_ENVIO_REFRESH_TOKEN && env.MELHOR_ENVIO_TOKEN_EXPIRES_AT;
+  if (!seeded && env.APP_ENV !== 'staging')
     return env.MELHOR_ENVIO_TOKEN;
-  const expiry = Number(env.MELHOR_ENVIO_TOKEN_EXPIRES_AT);
-  if (!Number.isFinite(expiry) || !env.MELHOR_ENVIO_TOKEN)
-    throw new Error('Invalid OAuth configuration');
-  await env.DB.prepare(
-    `INSERT INTO integration_tokens(provider,access_token,refresh_token,expires_at)
+  if (seeded) {
+    const expiry = Number(env.MELHOR_ENVIO_TOKEN_EXPIRES_AT);
+    if (!Number.isFinite(expiry) || !env.MELHOR_ENVIO_TOKEN)
+      throw new Error('Invalid OAuth configuration');
+    await env.DB.prepare(
+      `INSERT INTO integration_tokens(provider,access_token,refresh_token,expires_at)
  VALUES ('shipping',?,?,?) ON CONFLICT(provider) DO UPDATE SET access_token=excluded.access_token,
  refresh_token=excluded.refresh_token,expires_at=excluded.expires_at,refresh_state='idle'
- WHERE integration_tokens.expires_at<excluded.expires_at`,
-  )
-    .bind(env.MELHOR_ENVIO_TOKEN, env.MELHOR_ENVIO_REFRESH_TOKEN, expiry)
-    .run();
+ WHERE ?='local' AND integration_tokens.expires_at<excluded.expires_at`,
+    )
+      .bind(env.MELHOR_ENVIO_TOKEN, env.MELHOR_ENVIO_REFRESH_TOKEN, expiry, env.APP_ENV)
+      .run();
+  }
   const row = await env.DB.prepare(
     "SELECT * FROM integration_tokens WHERE provider='shipping'",
   ).first<{
@@ -23,7 +26,7 @@ export async function shippingToken(env: Env): Promise<string | undefined> {
     expires_at: number;
     refresh_state: string;
   }>();
-  if (!row) throw new Error('Missing OAuth token');
+  if (!row) return env.MELHOR_ENVIO_TOKEN;
   if (row.expires_at > Date.now() + 300000) return row.access_token;
   if (
     !env.MELHOR_ENVIO_CLIENT_ID ||
@@ -32,9 +35,9 @@ export async function shippingToken(env: Env): Promise<string | undefined> {
   )
     throw new Error('Missing OAuth credentials');
   const lock = await env.DB.prepare(
-    "UPDATE integration_tokens SET refresh_state='processing' WHERE provider='shipping' AND refresh_state='idle' AND expires_at=?",
+    "UPDATE integration_tokens SET refresh_state='processing' WHERE provider='shipping' AND refresh_state='idle' AND refresh_token=? AND expires_at=?",
   )
-    .bind(row.expires_at)
+    .bind(row.refresh_token, row.expires_at)
     .run();
   if (!lock.meta.changes) throw new Error('OAuth refresh already running or requires review');
   try {
@@ -52,7 +55,7 @@ export async function shippingToken(env: Env): Promise<string | undefined> {
         client_id: env.MELHOR_ENVIO_CLIENT_ID,
         client_secret: env.MELHOR_ENVIO_CLIENT_SECRET,
         refresh_token: row.refresh_token,
-      }),
+      }).toString(),
     });
     if (!response.ok) throw new Error('Refresh rejected');
     const token = (await response.json()) as {
@@ -67,16 +70,17 @@ export async function shippingToken(env: Env): Promise<string | undefined> {
       token.expires_in <= 0
     )
       throw new Error('Invalid refresh response');
-    await env.DB.prepare(
-      "UPDATE integration_tokens SET access_token=?,refresh_token=?,expires_at=?,refresh_state='idle' WHERE provider='shipping'",
+    const saved = await env.DB.prepare(
+      "UPDATE integration_tokens SET access_token=?,refresh_token=?,expires_at=?,refresh_state='idle' WHERE provider='shipping' AND refresh_state='processing' AND refresh_token=? AND expires_at=?",
     )
-      .bind(token.access_token, token.refresh_token, Date.now() + token.expires_in * 1000)
+      .bind(token.access_token, token.refresh_token, Date.now() + token.expires_in * 1000, row.refresh_token, row.expires_at)
       .run();
-    return token.access_token;
+    if (saved.meta.changes) return token.access_token;
+    return shippingToken(env);
   } catch {
     await env.DB.prepare(
-      "UPDATE integration_tokens SET refresh_state='review' WHERE provider='shipping'",
-    ).run();
+      "UPDATE integration_tokens SET refresh_state='review' WHERE provider='shipping' AND refresh_state='processing' AND refresh_token=? AND expires_at=?",
+    ).bind(row.refresh_token, row.expires_at).run();
     throw new Error('OAuth refresh requires new authorization');
   }
 }

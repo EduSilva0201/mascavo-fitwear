@@ -15,10 +15,14 @@ function validCpf(value: string) {
   return true;
 }
 const digits = z.string().max(30).transform(v => v.replace(/\D/g, ''));
+export const requiredCpfSchema = digits.refine(v => Boolean(v) && validCpf(v));
+export const phoneSchema = z.string().trim().max(24).regex(/^[+\d().\s-]+$/)
+  .transform(value => value.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, ''))
+  .refine(value => /^[1-9]{2}\d{8,9}$/.test(value));
 const profileSchema = z.object({
  name: z.string().trim().min(3).max(100),
- cpf: digits.refine(validCpf),
- phone: digits.refine(v => !v || /^\d{10,11}$/.test(v)),
+ cpf: requiredCpfSchema,
+ phone: phoneSchema,
 }).strict();
 const text = (max: number) => z.string().trim().min(1).max(max);
 const addressSchema = z.object({
@@ -42,7 +46,7 @@ profile.get('/', async c => {
 });
 profile.post('/', async c => {
  const parsed = profileSchema.safeParse(await c.req.json());
- if (!parsed.success) return c.json({ error: 'Confira o nome, CPF e telefone com DDD. CPF e telefone podem ficar em branco.' }, 400);
+ if (!parsed.success) return c.json({ error: 'Informe o nome, um CPF válido e o telefone com DDD.' }, 400);
  const { name, cpf, phone } = parsed.data, id = (await currentSession(c))!.customer.id, time = now();
  await c.env.DB.batch([
   c.env.DB.prepare('UPDATE customers SET name=?,updated_at=? WHERE id=?').bind(name,time,id),

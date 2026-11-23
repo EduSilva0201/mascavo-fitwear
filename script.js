@@ -173,7 +173,7 @@ function openProduct(id) {
   detailProduct = p;
   selectedColor = selection(p).color || p.colors[0];
   selectedSize = selection(p).size || '';
-  $('#product-detail').innerHTML = '<div class="product-detail-layout"><div class="detail-gallery"><button type="button" class="detail-zoom-trigger" data-open-product-zoom><img class="detail-img" src="' + photo(p, selectedColor) + '" alt="' + p.name + '"><span class="detail-zoom-label">' + uiIcon('search') + 'Ampliar foto</span></button><div class="product-thumbnails">' + p.gallery.map((im,i) => '<button type="button" data-detail-image="' + i + '" aria-label="Ver ' + im.label + '"><img src="' + im.src + '" alt=""></button>').join('') + '</div></div><div class="detail-copy"><span class="kicker">MASCAVO / ' + p.category + '</span><h2 id="detail-title">' + p.name + '</h2><strong class="detail-price">' + money(p.price) + '</strong><p class="provisional-note">Preço e estoque provisórios para testes</p><p class="detail-description">' + p.description + '</p><p>Cor: <span id="detail-color">' + selectedColor + '</span></p><div class="swatches">' + p.colors.map(c => '<button type="button" class="swatch" data-modal-color="' + c + '" style="--swatch:' + (p.colorHex?.[c] || colorHex[c] || '#b59b83') + '" aria-label="Cor ' + c + '" aria-pressed="' + (c === selectedColor) + '"></button>').join('') + '</div><p>Escolha seu tamanho</p><div class="sizes">' + productSizes(p).map(s => '<button type="button" data-size="' + s + '" aria-pressed="' + (s === selectedSize) + '">' + s + '</button>').join('') + '</div><p id="detail-feedback" role="status"></p><button class="primary detail-add" data-add="' + p.id + '">' + uiIcon('bag') + 'Adicionar à sacola</button></div></div>';
+  $('#product-detail').innerHTML = '<div class="product-detail-layout"><div class="detail-gallery"><button type="button" class="detail-zoom-trigger" data-open-product-zoom><img class="detail-img" src="' + photo(p, selectedColor) + '" alt="' + p.name + '"><span class="detail-zoom-label">' + uiIcon('search') + 'Ampliar foto</span></button><div class="product-thumbnails">' + p.gallery.map((im,i) => '<button type="button" data-detail-image="' + i + '" aria-label="Ver ' + im.label + '"><img src="' + im.src + '" alt=""></button>').join('') + '</div></div><div class="detail-copy"><span class="kicker">MASCAVO / ' + p.category + '</span><h2 id="detail-title">' + p.name + '</h2><strong class="detail-price">' + money(p.price) + '</strong><p class="provisional-note">Preço e estoque provisórios para testes</p><p class="detail-description">' + p.description + '</p><p>Cor: <span id="detail-color">' + selectedColor + '</span></p><div class="swatches">' + p.colors.map(c => '<button type="button" class="swatch" data-modal-color="' + c + '" style="--swatch:' + (p.colorHex?.[c] || colorHex[c] || '#b59b83') + '" aria-label="Cor ' + c + '" aria-pressed="' + (c === selectedColor) + '"></button>').join('') + '</div><p>Escolha seu tamanho</p><div class="sizes">' + productSizes(p).map(s => '<button type="button" data-size="' + s + '" aria-pressed="' + (s === selectedSize) + '">' + s + '</button>').join('') + '</div><p id="detail-feedback" class="form-feedback" data-kind="error" role="status"></p><button class="primary detail-add" data-add="' + p.id + '">' + uiIcon('bag') + 'Adicionar à sacola</button></div></div>';
   if (!productDialog.open) productDialog.showModal();
 }
 
@@ -285,7 +285,7 @@ function add(id, size, color) {
   if (x) x.qty = Math.min(limit, x.qty + 1);
   else cart.push({ id, size, color, qty: 1 });
   persist();
-  toast('✓ ' + p.name + ' adicionado à sacola');
+  toast(p.name + ' adicionado à sacola');
   return true;
 }
 function cartView() {
@@ -327,52 +327,146 @@ function cartView() {
   $('#cart-summary').innerHTML = cart.length
     ? '<div class="summary"><span>Subtotal</span><span>' +
       money(total) +
-      '</span></div><button class="primary" disabled style="opacity:.55;cursor:not-allowed">Compras em produção indisponíveis</button><p class="demo-note">Use o checkout abaixo para criar um pedido de teste com pagamento e frete Sandbox.</p>'
+      '</span></div><button class="primary" disabled style="opacity:.55;cursor:not-allowed">Compras em produção indisponíveis</button><p class="demo-note">Use o checkout abaixo para criar um pedido de teste com pagamento pelo Asaas Sandbox.</p>'
     : '';
-  if (cart.length) mountSandboxTests();
+  if (cart.length) mountSandboxTests(total);
 }
 
-// Sandbox checkout choices; no shipment or stock reservation is created yet.
+// Keep a stable request key while the customer retries the same checkout.
 let sandboxPaymentKey = '', sandboxPaymentCart = '';
-function mountSandboxTests() {
+function mountSandboxTests(subtotal) {
   const panel = document.createElement('details');
   panel.className = 'sandbox-tests'; panel.open = true;
-  panel.innerHTML = '<summary>Entrega e pagamento</summary><p>Ambiente de testes. Escolha o frete e a forma de pagamento. Nenhum pedido real será criado.</p><label>CEP de destino<input name="sandbox-cep" inputmode="numeric" autocomplete="postal-code" maxlength="9" placeholder="00000-000"></label><button type="button" data-sandbox-quote>Consultar frete</button><fieldset class="shipping-options" hidden><legend>Escolha a entrega</legend></fieldset><label>Forma de pagamento<select name="billing-type"><option value="PIX">Pix</option><option value="BOLETO">Boleto</option><option value="CREDIT_CARD">Cartão de crédito</option></select></label><label class="installment-choice" hidden>Parcelas<select name="installments"><option value="1">1 vez</option><option value="2">2 vezes</option><option value="3">3 vezes</option></select></label><p class="checkout-total"></p><button type="button" data-sandbox-payment disabled>Continuar para pagamento</button><p role="status" aria-live="polite"></p><div class="sandbox-results"></div>';
+  panel.innerHTML = '<summary>Pagamento</summary><p>Ambiente de testes. Escolha o frete e a forma de pagamento. Nenhum pedido real será criado.</p><label>CEP de destino<input name="sandbox-cep" inputmode="numeric" autocomplete="postal-code" maxlength="9" placeholder="00000-000"></label><button type="button" data-sandbox-quote>Consultar frete</button><fieldset class="shipping-options" hidden><legend>Escolha a entrega</legend></fieldset><label>Forma de pagamento<select name="billing-type"><option value="PIX">Pix</option><option value="BOLETO">Boleto</option><option value="CREDIT_CARD">Cartão de crédito</option></select></label><label class="installment-choice" hidden>Parcelas<select name="installments"><option value="1">1 vez</option><option value="2">2 vezes</option><option value="3">3 vezes</option></select></label><p class="checkout-total"></p><p class="form-feedback" role="status" aria-atomic="true"></p><button type="button" data-sandbox-payment disabled>Continuar para pagamento</button><div class="sandbox-results"></div>';
   $('#cart-summary').append(panel);
-  panel.querySelector('summary + p').textContent = 'Pedido de teste: escolha um endereço cadastrado, o frete e o pagamento. Não é uma compra em produção.';
+  const checkoutNote = panel.querySelector('summary + p');
+  checkoutNote.textContent = 'Carregando checkout de teste...';
   const addressLabel = document.createElement('label'); addressLabel.textContent = 'Endereço de entrega';
   const addressSelect = document.createElement('select'); addressSelect.name = 'order-address';
   addressSelect.append(new Option('Selecione um endereço de Minha conta', '')); addressLabel.append(addressSelect);
-  panel.querySelector('summary + p').after(addressLabel);
-  let addresses = [];
+  const addressHint = document.createElement('p');
+  addressHint.id = 'checkout-address-hint';
+  addressHint.className = 'form-feedback';
+  addressHint.dataset.kind = 'warning';
+  addressHint.textContent = 'Selecione um endereço para continuar. Você pode cadastrar um em Minha conta.';
+  addressHint.hidden = true;
+  addressSelect.setAttribute('aria-describedby', addressHint.id);
+  const profileHint = document.createElement('div');
+  profileHint.className = 'form-feedback';
+  profileHint.dataset.kind = 'warning';
+  profileHint.hidden = true;
+  const profileMessage = document.createElement('span');
+  const profileButton = document.createElement('button');
+  profileButton.type = 'button';
+  profileButton.id = 'checkout-login';
+  profileButton.textContent = 'Abrir Minha conta';
+  profileHint.append(profileMessage, document.createElement('br'), profileButton);
+  checkoutNote.after(addressLabel, addressHint, profileHint);
+  let addresses = [], profileReady = false, missingProfile = [];
   fetch('/api/v1/auth/profile').then(r => r.ok ? r.json() : null).then(data => {
-    if (!data || !panel.isConnected) return;
-    addresses = data.addresses || [];
+    if (!panel.isConnected) return;
+    const profile = data?.profile;
+    addresses = data?.addresses || [];
     for (const address of addresses) addressSelect.append(new Option(address.label + ' · ' + address.street + ', ' + address.number, address.id));
-  }).catch(() => {});
+    if (profile) {
+      const phone = String(profile.phone || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
+      missingProfile = [
+        ...(/^\d{11}$/.test(profile.cpf || '') ? [] : ['CPF']),
+        ...(/^[1-9]{2}\d{8,9}$/.test(phone) ? [] : ['telefone com DDD']),
+      ];
+    }
+    profileReady = Boolean(profile) && !missingProfile.length;
+    profileMessage.textContent = profile
+      ? 'Preencha ' + missingProfile.join(' e ') + ' em Minha conta para continuar.'
+      : 'Entre em Minha conta para preencher seus dados e finalizar o pedido.';
+    update();
+  }).catch(() => {
+    profileMessage.textContent = 'Seus dados não puderam ser carregados. Abra Minha conta para continuar.';
+    update();
+  });
   const status = panel.querySelector('[role="status"]'), results = panel.querySelector('.sandbox-results');
+  function showStatus(message, kind = 'info') {
+    status.dataset.kind = kind;
+    status.textContent = message;
+    if (kind === 'error' || kind === 'warning') status.scrollIntoView({ block: 'nearest' });
+  }
   const cepInput = panel.querySelector('[name="sandbox-cep"]'), method = panel.querySelector('[name="billing-type"]');
   const installments = panel.querySelector('[name="installments"]'), options = panel.querySelector('.shipping-options');
   const pay = panel.querySelector('[data-sandbox-payment]'), quoteButton = panel.querySelector('[data-sandbox-quote]');
   let quoteData = null, selected = null, busy = false;
+  let integratedShipping = null;
+  let live = false, closed = false, pilot = false, delivery = null;
+  fetch('/api/v1/health').then(r => r.ok ? r.json() : Promise.reject()).then(data => {
+    if (!panel.isConnected) return;
+    live = data.checkout === 'live';
+    closed = data.checkout === 'closed';
+    pilot = data.pilot === true;
+    delivery = data.delivery;
+    if (data.production) $('#cart-summary > .demo-note').hidden = true;
+    if (closed) {
+      panel.replaceChildren(document.createTextNode('As vendas online ainda não estão abertas.'));
+      return;
+    }
+    if (live) {
+      for (const option of [...method.options]) {
+        if (!data.paymentMethods.includes(option.value)) option.remove();
+      }
+    }
+    integratedShipping = data.integratedShipping === true;
+    panel.querySelector('summary').textContent = integratedShipping ? 'Entrega e pagamento' : 'Pagamento';
+    checkoutNote.textContent = integratedShipping
+      ? 'Pedido de teste. Selecione o endereço, o frete e o pagamento.'
+      : pilot ? 'Teste privado de cobrança real por Pix. Nenhum produto será enviado.'
+      : live ? 'Entrega pela loja. Prazo estimado: ' + delivery.estimate + '.'
+        : 'Entrega pela loja. Combine o prazo e qualquer taxa com a Mascavo antes de pagar. A cobrança de teste cobre apenas os produtos.';
+    if (!integratedShipping) {
+      window.storeSettingsReady?.then(settings => {
+        if (!panel.isConnected) return;
+        const policy = document.createElement('p');
+        policy.textContent = settings?.deliveryPolicy || '';
+        const contact = window.deliveryContactLink(settings);
+        if (policy.textContent) checkoutNote.after(policy);
+        if (contact) (policy.isConnected ? policy : checkoutNote).after(contact);
+      });
+    }
+    update();
+  }).catch(() => {
+    checkoutNote.classList.add('form-feedback');
+    checkoutNote.dataset.kind = 'error';
+    checkoutNote.textContent = 'Checkout indispon?vel. Atualize a p?gina para tentar novamente.';
+  });
   function update() {
-    const total = quoteData && selected ? quoteData.subtotalCents + selected.priceCents : null;
-    panel.querySelector('.checkout-total').textContent = total === null ? 'Consulte e selecione o frete para calcular o total.' : 'Total com frete: ' + money(total / 100);
+    if (closed) return;
+    const total = integratedShipping === false ? Math.round(subtotal * 100) + (delivery?.feeCents ?? 0) : quoteData && selected ? quoteData.subtotalCents + selected.priceCents : null;
+    panel.querySelector('.checkout-total').textContent = total === null ? '' : live
+      ? 'Entrega: ' + money(delivery.feeCents / 100) + ' · Total a pagar: ' + money(total / 100)
+      : (integratedShipping ? 'Total com frete: ' : 'Total dos produtos: ') + money(total / 100);
     panel.querySelector('.installment-choice').hidden = method.value !== 'CREDIT_CARD';
     if (method.value !== 'CREDIT_CARD') installments.value = '1';
     for (const option of installments.options) {
       const n = Number(option.value);
       option.textContent = n + 'x' + (total === null ? '' : ' de aproximadamente ' + money(Math.ceil(total / n) / 100));
     }
-    pay.disabled = busy || !selected;
+    const address = addresses.find(item => item.id === addressSelect.value);
+    const outsideRegion = live && !pilot && address && !delivery.cepPrefixes.some(prefix => address.cep.startsWith(prefix));
+    addressHint.hidden = integratedShipping === null || (Boolean(addressSelect.value) && !outsideRegion);
+    addressHint.textContent = outsideRegion ? 'Este endereço está fora da região de entrega da loja.'
+      : 'Selecione um endereço para continuar. Você pode cadastrar um em Minha conta.';
+    profileHint.hidden = !profileMessage.textContent || profileReady;
+    pay.disabled = busy || integratedShipping === null || !profileReady || !addressSelect.value || Boolean(outsideRegion) || (integratedShipping && !selected);
     quoteButton.disabled = busy;
+    quoteButton.hidden = cepInput.closest('label').hidden = integratedShipping !== true;
     panel.querySelectorAll('input,select').forEach(el => el.disabled = busy);
   }
   function invalidate() {
     quoteData = null; selected = null; options.hidden = true;
+    status.textContent = '';
     options.querySelectorAll('label').forEach(el => el.remove()); results.replaceChildren(); update();
   }
-  cepInput.addEventListener('input', invalidate);
+  cepInput.addEventListener('input', () => {
+    cepInput.removeAttribute('aria-invalid');
+    invalidate();
+  });
   addressSelect.addEventListener('change', () => {
     const address = addresses.find(a => a.id === addressSelect.value);
     if (address) cepInput.value = address.cep;
@@ -381,21 +475,31 @@ function mountSandboxTests() {
   panel.addEventListener('change', () => { results.replaceChildren(); update(); });
   panel.addEventListener('click', async event => {
     const button = event.target.closest('button');
-    if (!button || button.disabled || busy) return;
+    if ((button !== pay && button !== quoteButton) || button.disabled || busy) return;
     const quote = button === quoteButton, snapshot = JSON.stringify(cart), cep = cepInput.value.replace(/\D/g, '');
-    if (!/^\d{8}$/.test(cep)) { status.textContent = 'Digite um CEP com 8 números.'; return; }
-    if (!quote && (!selected || !quoteData || quoteData.expiresAt <= Date.now() / 1000)) { invalidate(); status.textContent = 'Consulte o frete novamente.'; return; }
-    if (!quote && !addressSelect.value) { status.textContent = 'Cadastre e selecione o endereço de entrega em Minha conta.'; return; }
+    if (integratedShipping && !/^\d{8}$/.test(cep)) {
+      cepInput.setAttribute('aria-invalid', 'true');
+      cepInput.focus();
+      showStatus('Digite um CEP com 8 números.', 'error');
+      return;
+    }
+    if (integratedShipping && !quote && (!selected || !quoteData || quoteData.expiresAt <= Date.now() / 1000)) { invalidate(); showStatus('Consulte o frete novamente.', 'warning'); return; }
+    if (!quote && !addressSelect.value) { showStatus('Cadastre e selecione o endereço de entrega em Minha conta.', 'error'); return; }
     if (quote) invalidate();
     busy = true; update(); results.replaceChildren();
-    status.textContent = quote ? 'Consultando frete…' : 'Preparando pagamento…';
+    showStatus(quote ? 'Consultando frete…' : 'Preparando pagamento…');
     try {
       const csrfResponse = await fetch('/api/v1/auth/csrf');
       if (!csrfResponse.ok) throw new Error('Abra a loja pelo servidor local.');
       const { csrfToken } = await csrfResponse.json();
-      const payload = quote ? { cep, items: JSON.parse(snapshot) } : { items: JSON.parse(snapshot), quoteId: quoteData.quoteId, serviceId: selected.id, billingType: method.value, installments: Number(installments.value) };
+      const payload = quote ? { cep, items: JSON.parse(snapshot) } : { items: JSON.parse(snapshot), billingType: method.value, installments: Number(installments.value) };
       if (!quote) {
+        if (integratedShipping) {
+          payload.quoteId = quoteData.quoteId;
+          payload.serviceId = selected.id;
+        }
         payload.addressId = addressSelect.value;
+        if (live) payload.expectedAmountCents = Math.round(subtotal * 100) + delivery.feeCents;
         const fingerprint = JSON.stringify(payload);
         if (!sandboxPaymentKey || sandboxPaymentCart !== fingerprint) { sandboxPaymentKey = crypto.randomUUID(); sandboxPaymentCart = fingerprint; }
         payload.requestKey = sandboxPaymentKey;
@@ -408,7 +512,7 @@ function mountSandboxTests() {
       if (JSON.stringify(cart) !== snapshot || !panel.isConnected) return;
       if (quote) {
         quoteData = data; options.hidden = !data.rates.length;
-        status.textContent = data.rates.length ? 'Selecione uma opção de entrega. Valores simulados no sandbox.' : 'Nenhum serviço disponível para este CEP.';
+        showStatus(data.rates.length ? 'Selecione uma opção de entrega. Valores simulados no sandbox.' : 'Nenhum serviço disponível para este CEP.', data.rates.length ? 'info' : 'warning');
         for (const rate of data.rates) {
           const label = document.createElement('label'), radio = document.createElement('input'), text = document.createElement('span');
           radio.type = 'radio'; radio.name = 'shipping-service'; radio.value = rate.id;
@@ -417,14 +521,18 @@ function mountSandboxTests() {
           label.append(radio,text); options.append(label);
         }
       } else {
-        if (!data.invoiceUrl) { status.textContent = 'Pedido ' + data.orderId + ' registrado e aguardando revisão da cobrança. Consulte Meus pedidos antes de tentar novamente.'; return; }
+        if (!data.invoiceUrl) { showStatus('Pedido ' + data.orderId + ' registrado e aguardando revisão da cobrança. Consulte Meus pedidos antes de tentar novamente.', 'warning'); return; }
         const url = new URL(data.invoiceUrl);
-        if (url.protocol !== 'https:' || url.hostname !== 'sandbox.asaas.com') throw new Error('Link de teste inválido.');
-        const link = document.createElement('a'); link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer';
-        link.textContent = 'Abrir pagamento no Asaas'; results.append(link);
-        status.textContent = 'Pedido ' + data.orderId + ' criado. Acompanhe em Minha conta. Para cartão, informe os dados na página segura do Asaas.';
+        const origins = live ? ['https://www.asaas.com', 'https://asaas.com'] : ['https://sandbox.asaas.com'];
+        if (!origins.includes(url.origin) || url.username || url.password) throw new Error('Link de pagamento inválido.');
+        const link = document.createElement('a');
+        link.href = url.href;
+        link.textContent = 'Abrir pagamento no Asaas';
+        results.append(link);
+        showStatus('Redirecionando para o pagamento no Asaas...');
+        window.location.assign(url.href);
       }
-    } catch (error) { status.textContent = error.message || 'Falha na operação.'; }
+    } catch (error) { showStatus(error.message || 'Falha na operação.', 'error'); }
     finally { busy = false; update(); }
   });
   update();
@@ -474,11 +582,16 @@ document.addEventListener('click', (e) => {
   if (!b) return;
   if (b.dataset.galleryProduct) {
     const p = products.find(p => p.id === Number(b.dataset.galleryProduct));
+    const thumbnailScroll = b.parentElement.scrollLeft;
     selection(p).imageIndex = Number(b.dataset.galleryIndex);
     const image = p.gallery[selection(p).imageIndex];
     if (image.color) selection(p).color = image.color;
     renderProducts();
-    document.querySelector(`[data-gallery-product="${p.id}"][data-gallery-index="${selection(p).imageIndex}"]`)?.focus({preventScroll:true});
+    const selectedThumbnail = document.querySelector(`[data-gallery-product="${p.id}"][data-gallery-index="${selection(p).imageIndex}"]`);
+    if (selectedThumbnail) {
+      selectedThumbnail.parentElement.scrollLeft = thumbnailScroll;
+      selectedThumbnail.focus({ preventScroll: true });
+    }
   }
   if (b.dataset.filter) {
     filter = b.dataset.filter;

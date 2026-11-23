@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mascavo-fitwear-production",
+  "main": "backend/src/index.ts",
+  "compatibility_date": "2026-11-09",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "mascavofit.com.br", "custom_domain": true }],
+  "vars": {
+    "APP_ENV": "production",
+    "APP_ORIGIN": "https://mascavofit.com.br",
+    "CHECKOUT_ENABLED": "false",
+    "CHECKOUT_PILOT_EMAIL": "fitwearmascavo@gmail.com",
+    "CHECKOUT_PILOT_AMOUNT_CENTS": "500",
+    "ASAAS_PAYMENT_METHODS": "PIX"
+  },
+  "assets": { "directory": "dist/public", "binding": "ASSETS", "run_worker_first": true },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "mascavo-production",
+    "database_id": "efa40074-d12b-455a-a703-7218aa467891",
+    "migrations_dir": "backend/migrations"
+  }],
+  "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "mascavo-images-production" }],
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": { "enabled": true }
+}

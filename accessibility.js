@@ -35,7 +35,14 @@
     <p>Para tradução em Libras, use o botão azul do VLibras na lateral da página.</p>
     <button type="button" data-reset>Restaurar preferências</button>
     <p class="a11y-status" role="status" aria-live="polite"></p>`;
-  document.body.append(trigger, panel);
+  document.body.append(panel);
+  const mobileMenu = document.getElementById('mobile-menu');
+  const mobileLayout = matchMedia('(max-width: 620px)');
+  function placeTrigger() {
+    (mobileLayout.matches && mobileMenu ? mobileMenu : document.body).append(trigger);
+  }
+  placeTrigger();
+  mobileLayout.addEventListener('change', placeTrigger);
 
   function apply() {
     for (const name of Object.keys(options)) {

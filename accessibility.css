@@ -12,6 +12,10 @@
   overflow: auto; padding: 24px; border: 1px solid #725743; border-radius: 18px;
   background: #fffaf4; color: #261307; font: 16px/1.6 system-ui, sans-serif;
 }
+@media (max-width: 620px) {
+  #mobile-menu .a11y-trigger { position: static; display: flex; width: auto; min-height: 44px; gap: 8px; box-shadow: none; }
+  #mobile-menu .a11y-trigger::after { content: 'Acessibilidade'; }
+}
 .a11y-panel::backdrop { background: #0008; }
 .a11y-panel header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .a11y-panel h2 { margin: 0; font-size: 23px; }

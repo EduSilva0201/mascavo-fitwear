@@ -5,16 +5,17 @@
   const submit = document.querySelector('#account-submit');
   const note = dialog.querySelector('.demo-note');
   const feedback = document.createElement('p');
-  feedback.className = 'account-feedback';
+  feedback.className = 'form-feedback account-feedback';
   feedback.id = 'account-feedback';
   feedback.setAttribute('role', 'status');
-  feedback.setAttribute('aria-live', 'polite');
+  feedback.setAttribute('aria-atomic', 'true');
   feedback.hidden = true;
-  form.before(feedback);
+  submit.before(feedback);
   function toast(message, kind = 'error') {
     feedback.textContent = message || 'Operação concluída.';
     feedback.dataset.kind = kind;
     feedback.hidden = false;
+    feedback.scrollIntoView({ block: 'nearest' });
   }
   let tab = 'login',
     customer = null,
@@ -28,10 +29,22 @@
     verify: 'Confirmar e-mail',
   };
 
+  async function readAccountResponse(response) {
+    const contentType = response.headers.get('Content-Type') || '';
+    if (contentType.toLowerCase().startsWith('application/json')) {
+      const result = await response.json().catch(() => null);
+      if (result && typeof result === 'object') return result;
+    }
+    if (response.status === 401 || response.status === 403 || response.redirected) {
+      throw new Error('Recarregue a loja para renovar o acesso e tente novamente.');
+    }
+    throw new Error('O serviço de conta está indisponível no momento. Tente novamente.');
+  }
   async function csrf() {
     const response = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin' });
-    if (!response.ok) throw new Error('Abra a loja pelo ambiente local do backend.');
-    csrfToken = (await response.json()).csrfToken;
+    const result = await readAccountResponse(response);
+    if (!response.ok || !result.csrfToken) throw new Error(result.error || 'Não foi possível acessar a conta.');
+    csrfToken = result.csrfToken;
   }
   async function request(path, data) {
     if (!csrfToken) await csrf();
@@ -41,18 +54,19 @@
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
       body: JSON.stringify(data),
     });
-    const result = await response.json();
+    if (response.status === 403) csrfToken = '';
+    const result = await readAccountResponse(response);
     if (result.csrfToken) csrfToken = result.csrfToken;
     if (!response.ok) {
-      if (response.status === 403) csrfToken = '';
       throw new Error(result.error || 'Não foi possível concluir a operação.');
     }
     return result;
   }
   async function refresh() {
     const response = await fetch('/api/v1/auth/session', { credentials: 'same-origin' });
-    if (!response.ok) throw new Error('Conta indisponível. Inicie o ambiente local.');
-    customer = (await response.json()).customer;
+    const result = await readAccountResponse(response);
+    if (!response.ok) throw new Error(result.error || 'Não foi possível acessar a conta.');
+    customer = result.customer;
     document.querySelector('#account-toggle').title = customer
       ? 'Minha conta: ' + customer.name
       : 'Minha conta';
@@ -77,6 +91,11 @@
       el.maxLength = 100;
     }
     if (name === 'email') el.maxLength = 254;
+    if (name === 'cpf') {
+      el.inputMode = 'numeric';
+      el.maxLength = 14;
+    }
+    if (type === 'tel') el.maxLength = 24;
     if (name === 'token') {
       el.pattern = '[a-f0-9]{64}';
       el.maxLength = 64;
@@ -143,8 +162,8 @@
       const personalForm = element('form', '', 'profile-form');
       profileField(personalForm, 'Nome completo', 'name', data.profile.name, {required:true, autocomplete:'name'});
       const email = element('p', data.profile.email, 'profile-email'); personalForm.append(email);
-      profileField(personalForm, 'CPF (opcional)', 'cpf', data.profile.cpf, {max:14,inputMode:'numeric'});
-      profileField(personalForm, 'Telefone com DDD (opcional)', 'phone', data.profile.phone, {type:'tel',autocomplete:'tel',max:20});
+      profileField(personalForm, 'CPF', 'cpf', data.profile.cpf, {max:14,inputMode:'numeric',required:true});
+      profileField(personalForm, 'Telefone com DDD', 'phone', data.profile.phone, {type:'tel',autocomplete:'tel',max:24,required:true});
       const save = element('button','Salvar meus dados','primary'); save.type='submit'; personalForm.append(save);
       personal.append(personalForm); root.append(personal);
       personalForm.onsubmit = async event => {
@@ -194,16 +213,19 @@
     feedback.hidden = true;
     feedback.textContent = "";
     fields.replaceChildren();
-    form.hidden = !!customer;
+    const showProfile = Boolean(customer) && !['verify', 'reset'].includes(tab);
+    form.hidden = showProfile;
+    if (showProfile) form.before(feedback);
+    else submit.before(feedback);
     dialog.querySelector('.account-tabs').hidden = !!customer;
     document.querySelector('#account-extra')?.remove();
     const extra = document.createElement('div');
     extra.id = 'account-extra';
     (dialog.querySelector('.account-content') || dialog).append(extra);
-    dialog.dataset.view = customer ? 'profile' : tab;
+    dialog.dataset.view = showProfile ? 'profile' : tab;
     const title = dialog.querySelector('#account-title');
-    if (title) title.textContent = customer ? 'Minha conta.' : ({ login: 'Bom ter você aqui.', register: 'Seu próximo movimento.', forgot: 'Vamos recuperar seu acesso.', reset: 'Um novo começo.', verify: 'Falta só confirmar.' }[tab]);
-    if (customer) {
+    if (title) title.textContent = showProfile ? 'Minha conta.' : ({ login: 'Bom ter você aqui.', register: 'Seu próximo movimento.', forgot: 'Vamos recuperar seu acesso.', reset: 'Um novo começo.', verify: 'Falta só confirmar.' }[tab]);
+    if (showProfile) {
       const text = document.createElement('p');
       text.textContent =
         'Olá, ' +
@@ -211,6 +233,36 @@
         '. ' +
         (customer.emailVerified ? 'E-mail confirmado.' : 'Seu e-mail ainda aguarda confirmação.');
       extra.append(text);
+      if (!customer.emailVerified) {
+        const verification = element('form', '', 'profile-form profile-panel');
+        profileField(verification, 'Código de confirmação recebido por e-mail', 'token', '', {
+          required: true, max: 64, autocomplete: 'off',
+        });
+        const code = verification.elements.namedItem('token');
+        code.pattern = '[a-f0-9]{64}';
+        code.spellcheck = false;
+        const verify = element('button', 'Confirmar meu e-mail', 'primary');
+        verify.type = 'submit';
+        verification.append(verify);
+        verification.onsubmit = async event => {
+          event.preventDefault();
+          if (busy) return;
+          busy = true;
+          verify.disabled = true;
+          try {
+            const result = await request('verify-email', { token: code.value.trim() });
+            await refresh();
+            render();
+            toast(result.message, 'success');
+          } catch (error) {
+            toast(error.message);
+          } finally {
+            busy = false;
+            verify.disabled = false;
+          }
+        };
+        extra.append(verification);
+      }
       const logout = document.createElement('button');
       logout.className = 'primary';
       logout.textContent = 'Sair da conta';
@@ -247,7 +299,12 @@
     document.querySelectorAll('[data-account-tab]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.accountTab === tab)));
     if (tab === 'register') input('Nome completo', 'name', 'text', 'name');
     if (['login', 'register', 'forgot'].includes(tab)) input('E-mail', 'email', 'email', 'email');
-    if (['reset', 'verify'].includes(tab)) input('Código recebido por e-mail', 'token');
+    if (tab === 'register') {
+      input('CPF', 'cpf');
+      input('Telefone com DDD', 'phone', 'tel', 'tel');
+    }
+    if (tab === 'reset') input('Código do e-mail Recupere sua senha', 'token');
+    if (tab === 'verify') input('Código do e-mail Confirme seu e-mail', 'token');
     if (['login', 'register', 'reset'].includes(tab))
       input(
         tab === 'reset' ? 'Nova senha' : 'Senha',
@@ -277,8 +334,8 @@
     }
     note.textContent =
       tab === 'register' || tab === 'reset'
-        ? 'Use uma senha de 12 a 128 caracteres. Neste ambiente, utilize apenas dados fictícios.'
-        : 'Ambiente de desenvolvimento: utilize apenas dados fictícios.';
+        ? 'Use uma senha de 12 a 128 caracteres.'
+        : '';
   }
   async function loadOrders(root) {
     root.replaceChildren(element('h3', 'Meus pedidos'));
@@ -289,44 +346,60 @@
       if (!root.isConnected) return;
       if (!data.orders.length) root.append(element('p', 'Você ainda não tem pedidos.'));
       const states = { pending:'Aguardando pagamento', paid:'Pagamento confirmado', review:'Revisão da cobrança', creating:'Preparando cobrança', refund:'Estorno em análise ou concluído', chargeback:'Contestação', late_payment:'Pagamento após expiração: em revisão', blocked:'Pagamento não aprovado' };
+      const deliveryLabels = { to_arrange: 'A combinar', scheduled: 'Agendada', delivered: 'Entregue' };
+      const deliveryText = (state, date) => {
+        const label = deliveryLabels[state] || deliveryLabels.to_arrange;
+        return 'Entrega pela loja: ' + label + (date ? ' · ' + date.split('-').reverse().join('/') : '');
+      };
       for (const order of data.orders) {
         const card = element('details'); card.append(element('summary', 'Pedido ' + order.id.slice(0,8) + ' · ' + (order.amount_cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})));
         const status = element('p', states[order.payment_state] || order.payment_state);
-        const refresh = element('button','Atualizar pagamento e entrega','account-link'); refresh.type='button';
+        const delivery = element('p', deliveryText(order.delivery_state, order.delivery_date));
+        const refresh = element('button','Atualizar pedido','account-link'); refresh.type='button';
         refresh.onclick = async () => {
           refresh.disabled = true;
           try {
             if (!csrfToken) await csrf();
             const r = await fetch('/api/v1/orders/'+order.id+'/reconcile', {method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken},body:'{}'});
             const payment = await r.json(); if (!r.ok) throw Error(payment.error);
-            const detail = await (await fetch('/api/v1/orders/'+order.id)).json();
             status.textContent = states[payment.paymentState] || payment.paymentState;
-            card.querySelectorAll('[data-tracking]').forEach(n=>n.remove());
-            for (const shipment of detail.shipments) {
-              const line = element('p', 'Entrega: ' + shipment.state + ' · Rastreio: ' + (shipment.tracking || 'aguardando transportadora'));
-              line.dataset.tracking='true'; card.append(line);
-              if (shipment.tracking_url) { const link=element('a','Acompanhar entrega'); link.href=shipment.tracking_url; link.target='_blank'; link.rel='noopener noreferrer'; link.dataset.tracking='true'; card.append(link); }
+            const detail = await fetch('/api/v1/orders/'+order.id);
+            if (detail.ok) {
+              const { order: updated } = await detail.json();
+              delivery.textContent = deliveryText(updated.deliveryState, updated.deliveryDate);
             }
           } catch(error) { toast(error.message); } finally { refresh.disabled=false; }
         };
-        card.append(status,refresh);
-        if (order.invoice_url) { const url=new URL(order.invoice_url); if(url.protocol==='https:'&&url.hostname==='sandbox.asaas.com') {const link=element('a','Abrir pagamento');link.href=url.href;link.target='_blank';link.rel='noopener noreferrer';card.append(link);} }
+        card.append(status, delivery, refresh);
+        window.storeSettingsReady?.then(settings => {
+          const contact = window.deliveryContactLink(settings);
+          if (card.isConnected && contact) delivery.after(contact);
+        });
+        if (order.invoice_url) {
+          const url = new URL(order.invoice_url);
+          if (['https://sandbox.asaas.com', 'https://www.asaas.com', 'https://asaas.com'].includes(url.origin) && !url.username && !url.password) {
+            const link = element('a', 'Abrir pagamento');
+            link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; card.append(link);
+          }
+        }
         root.append(card);
       }
     } catch(error) { root.append(element('p',error.message || 'Pedidos indisponíveis.')); }
   }
-  window.openAccount = async () => {
+  async function openAccount(mode = 'login', code = '') {
     if (busy) return;
-    tab = 'login';
+    tab = mode;
     render();
+    if (code) form.elements.namedItem('token').value = code;
     if (!dialog.open) dialog.showModal();
     try {
       await refresh();
-      render();
+      if (!code) render();
     } catch (error) {
       toast(error.message);
     }
-  };
+  }
+  window.openAccount = openAccount;
   document.querySelectorAll('[data-account-tab]').forEach((b) =>
     b.addEventListener('click', () => {
       if (!busy) {
@@ -335,15 +408,43 @@
       }
     }),
   );
-  form.addEventListener('invalid', (event) => {
-    toast(event.target.name === 'token' ? 'Confira o código: ele deve conter 64 caracteres, sem espaços.' : 'Confira os campos destacados para continuar.');
+  dialog.addEventListener('invalid', (event) => {
+    const field = event.target;
+    field.setAttribute('aria-invalid', 'true');
+    if (field !== field.form?.querySelector(':invalid')) return;
+    const label = field.labels?.[0]?.firstChild?.textContent?.trim();
+    const message = field.validity.valueMissing && label
+      ? 'Preencha o campo ' + label + '.'
+      : field.name === 'token'
+        ? 'Confira o código: ele deve conter 64 caracteres, sem espaços.'
+        : field.validationMessage;
+    const alert = field.form === form ? feedback : field.labels?.[0];
+    if (alert === feedback) toast(message);
+    else if (alert) {
+      alert.querySelector('.form-feedback')?.remove();
+      const fieldFeedback = element('span', message, 'form-feedback');
+      fieldFeedback.dataset.kind = 'error';
+      fieldFeedback.setAttribute('role', 'alert');
+      alert.append(fieldFeedback);
+    }
   }, true);
+  function clearFieldError(event) {
+    const field = event.target;
+    if (!field.validity?.valid || !field.hasAttribute('aria-invalid')) return;
+    field.removeAttribute('aria-invalid');
+    if (field.form === form && feedback.dataset.kind === 'error') feedback.hidden = true;
+    field.labels?.[0]?.querySelector('.form-feedback')?.remove();
+  }
+  dialog.addEventListener('input', clearFieldError);
+  dialog.addEventListener('change', clearFieldError);
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (busy) return;
     const data = Object.fromEntries(new FormData(form));
     if (data.confirm !== undefined && data.confirm !== data.password) {
-      toast('As senhas não coincidem');
+      form.elements.confirm.setAttribute('aria-invalid', 'true');
+      form.elements.confirm.focus();
+      toast('As senhas não coincidem.');
       return;
     }
     delete data.confirm;
@@ -362,6 +463,8 @@
         toast('Você entrou na sua conta.', 'success');
       } else {
         tab = 'login';
+        if (operation === 'reset') customer = null;
+        if (operation === 'verify' && customer) await refresh();
         render();
         toast(result.message, 'success');
       }
@@ -373,5 +476,9 @@
     }
   });
   render();
-  if (location.protocol !== 'file:') refresh().catch(() => {});
+  const hash = location.hash.match(/^#mascavo-(confirmar|redefinir)=([a-f0-9]{64})$/);
+  if (hash) {
+    history.replaceState(history.state, '', location.pathname + location.search);
+    openAccount(hash[1] === 'confirmar' ? 'verify' : 'reset', hash[2]);
+  } else if (location.protocol !== 'file:') refresh().catch(() => {});
 })();

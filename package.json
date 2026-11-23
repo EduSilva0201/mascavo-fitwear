@@ -24,6 +24,7 @@
     "test:e2e": "node scripts/test.mjs e2e",
     "test:coverage": "node scripts/test.mjs coverage",
     "test:sandbox": "node --env-file-if-exists=.env.sandbox scripts/test.mjs sandbox",
+    "test:sandbox:shipping": "node --env-file-if-exists=.env.sandbox scripts/staging-shipping-test.mjs",
     "check": "npm run typecheck && npm test",
     "build:check": "npm run assets:prepare && node scripts/wrangler-local.mjs build",
     "mail:local": "node scripts/mail-local.mjs",

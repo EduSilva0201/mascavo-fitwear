@@ -1,8 +1,9 @@
-import profile from './profile';
+import profile, { phoneSchema, requiredCpfSchema } from './profile';
 import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { z } from 'zod';
 import type { Env } from '../../env';
+import { isProduction, productionMailConfigured } from '../../commerce-environment';
 import { digest, equal, hashPassword, randomToken, verifyPassword } from './crypto';
 import {
   cookie,
@@ -75,17 +76,22 @@ auth.get('/session', async (c) =>
 );
 
 auth.post('/register', async (c) => {
+  const production = isProduction(c.env);
+  if (production && !productionMailConfigured(c.env))
+    return c.json({ error: 'O cadastro ainda não está disponível.' }, 503);
   const parsed = z
     .object({
       name: z.string().trim().min(3).max(100),
       email: emailSchema,
       password: passwordSchema,
+      cpf: requiredCpfSchema,
+      phone: phoneSchema,
     })
     .strict()
     .safeParse(await c.req.json());
   if (!parsed.success)
-    return c.json({ error: 'Informe nome, e-mail válido e senha de 12 a 128 caracteres.' }, 400);
-  const { name, email, password } = parsed.data;
+    return c.json({ error: 'Informe nome, e-mail válido, CPF válido, telefone com DDD e senha de 12 a 128 caracteres.' }, 400);
+  const { name, email, password, cpf, phone } = parsed.data;
   if (await limited(c, await digest(email))) {
     c.header('Retry-After', '900');
     return c.json({ error: 'Muitas tentativas. Aguarde 15 minutos.' }, 429);
@@ -94,16 +100,20 @@ auth.post('/register', async (c) => {
   const id = crypto.randomUUID(),
     token = randomToken(),
     time = now();
+  const tokenHash = await digest(token);
   await c.env.DB.batch([
     c.env.DB.prepare(
       'INSERT OR IGNORE INTO customers(id,name,email,password_hash,created_at,updated_at) VALUES (?,?,?,?,?,?)',
     ).bind(id, name, email, passwordHash, time, time),
     c.env.DB.prepare(
-      "INSERT INTO auth_tokens(token_hash,customer_id,purpose,expires_at) SELECT ?,id,'verify',? FROM customers WHERE id=?",
-    ).bind(await digest(token), time + 86400, id),
+      'INSERT INTO customer_profiles(customer_id,cpf,phone,updated_at) SELECT id,?,?,? FROM customers WHERE id=?',
+    ).bind(cpf, phone, time, id),
     c.env.DB.prepare(
-      "INSERT INTO dev_mail(id,recipient,purpose,token,created_at) SELECT ?,email,'verify',?,? FROM customers WHERE id=?",
-    ).bind(crypto.randomUUID(), token, time, id),
+      "INSERT INTO auth_tokens(token_hash,customer_id,purpose,expires_at) SELECT ?,id,'verify',? FROM customers WHERE id=?",
+    ).bind(tokenHash, time + 86400, id),
+    c.env.DB.prepare(
+      "INSERT INTO dev_mail(id,recipient,purpose,token,created_at,auth_token_hash) SELECT ?,email,'verify',?,?,? FROM customers WHERE id=?",
+    ).bind(crypto.randomUUID(), token, time, production ? tokenHash : null, id),
   ]);
   return c.json(generic, 202);
 });
@@ -152,6 +162,9 @@ auth.post('/logout', async (c) => {
 });
 
 auth.post('/forgot-password', async (c) => {
+  const production = isProduction(c.env);
+  if (production && !productionMailConfigured(c.env))
+    return c.json({ error: 'A recuperação de senha ainda não está disponível.' }, 503);
   const parsed = z
     .object({ email: emailSchema })
     .strict()
@@ -169,16 +182,17 @@ auth.post('/forgot-password', async (c) => {
   if (customer) {
     const token = randomToken(),
       time = now();
+    const tokenHash = await digest(token);
     await c.env.DB.batch([
       c.env.DB.prepare(
         "UPDATE auth_tokens SET used_at=? WHERE customer_id=? AND purpose='reset' AND used_at IS NULL",
       ).bind(time, customer.id),
       c.env.DB.prepare(
         "INSERT INTO auth_tokens(token_hash,customer_id,purpose,expires_at) VALUES (?,?,'reset',?)",
-      ).bind(await digest(token), customer.id, time + 1800),
+      ).bind(tokenHash, customer.id, time + 1800),
       c.env.DB.prepare(
-        "INSERT INTO dev_mail(id,recipient,purpose,token,created_at) VALUES (?,?,'reset',?,?)",
-      ).bind(crypto.randomUUID(), parsed.data.email, token, time),
+        "INSERT INTO dev_mail(id,recipient,purpose,token,created_at,auth_token_hash) VALUES (?,?,'reset',?,?,?)",
+      ).bind(crypto.randomUUID(), parsed.data.email, token, time, production ? tokenHash : null),
     ]);
   }
   return c.json(generic, 202);
@@ -229,20 +243,21 @@ auth.post('/reset-password', async (c) => {
     "SELECT customer_id FROM auth_tokens WHERE token_hash=? AND purpose='reset' AND used_at IS NULL AND expires_at>?";
   const results = await c.env.DB.batch([
     c.env.DB.prepare(
-      `UPDATE customers SET password_hash=?,updated_at=? WHERE id IN (${condition})`,
-    ).bind(passwordHash, time, hash, time),
+      `UPDATE customers SET password_hash=?,updated_at=?,email_verified_at=COALESCE(email_verified_at,?)
+      WHERE status='active' AND id IN (${condition})`,
+    ).bind(passwordHash, time, time, hash, time),
     c.env.DB.prepare(`UPDATE sessions SET revoked_at=? WHERE customer_id IN (${condition})`).bind(
       time,
       hash,
       time,
     ),
     c.env.DB.prepare(
-      `UPDATE auth_tokens SET used_at=? WHERE purpose='reset' AND customer_id IN (${condition})`,
+      `UPDATE auth_tokens SET used_at=? WHERE used_at IS NULL AND customer_id IN (${condition})`,
     ).bind(time, hash, time),
   ]);
   if (!results[0].meta.changes) return c.json({ error: 'Token inválido ou expirado.' }, 400);
   cookie(c, sessionCookie(c), '', 0);
-  return c.json({ message: 'Senha atualizada. Entre novamente.', csrfToken: rotateCsrf(c) });
+  return c.json({ message: 'Senha atualizada e e-mail confirmado. Entre com sua nova senha.', csrfToken: rotateCsrf(c) });
 });
 
 export default auth;

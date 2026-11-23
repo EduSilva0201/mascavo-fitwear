@@ -54,7 +54,14 @@ export async function getShipment(env: Env, id: string) {
   return env.DB.prepare('SELECT * FROM shipments WHERE id=?').bind(id).first<Shipment>();
 }
 
-export async function prepareShipment(env: Env, order: Order) {
+export async function prepareShipment(env: Env, order: Order, mode: 'commercial' | 'test-content' = 'commercial') {
+  if (mode === 'test-content') {
+    const fixture = env.APP_ENV === 'staging' && await env.DB.prepare(
+      "SELECT 1 FROM customers WHERE id=? AND password_hash='disabled-fixture' AND email LIKE '%@example.test'",
+    ).bind(order.customer_id).first();
+    if (!fixture || order.fiscal_json)
+      throw new IntegrationError('Declaracao de teste disponivel apenas para pedidos ficticios sem nota.', 409);
+  }
   order = await reconcilePayment(env, order);
   if (order.payment_state !== 'paid' || order.reservation_state !== 'active')
     throw new IntegrationError('Pagamento ou reserva nao liberados para expedicao.', 409);
@@ -63,14 +70,17 @@ export async function prepareShipment(env: Env, order: Order) {
     data: string;
   }>();
   const sender = senderSchema.safeParse(config ? JSON.parse(config.data) : null);
-  if (!fiscal.success || !sender.success)
+  if (!sender.success || (!fiscal.success && mode === 'commercial'))
     throw new IntegrationError(
       'Preencha a chave da nota fiscal e os dados completos do remetente.',
       409,
     );
+  if (mode === 'test-content' &&
+      (!sender.data.email.endsWith('@example.test') || !sender.data.document || sender.data.state_register))
+    throw new IntegrationError('Use um remetente ficticio de pessoa fisica para a declaracao de teste.', 409);
   const snapshot = JSON.parse(order.snapshot_json),
     { address, customer, items, shipping } = snapshot;
-  if (!shipping.dimensionsVerified)
+  if (!shipping?.dimensionsVerified)
     throw new IntegrationError(
       'Cadastre peso e medidas reais por SKU e faca uma nova cotacao.',
       409,
@@ -138,8 +148,8 @@ export async function prepareShipment(env: Env, order: Order) {
       insurance_value: snapshot.subtotalCents / 100,
       receipt: false,
       own_hand: false,
-      non_commercial: false,
-      invoice: { key: fiscal.data.key },
+      non_commercial: mode === 'test-content',
+      ...(mode === 'commercial' && fiscal.success ? { invoice: { key: fiscal.data.key } } : {}),
       platform: 'Mascavo Fitwear Sandbox',
       tags: [{ tag: order.id, url: null }],
     },
@@ -250,9 +260,28 @@ export async function reconcileShipment(env: Env, shipment: Shipment) {
     '/me/shipment/tracking',
     { orders: [shipment.provider_id] },
   );
-  const data = result[shipment.provider_id];
+  let data = result[shipment.provider_id];
   if (!data || data.id !== shipment.provider_id)
     throw new IntegrationError('Etiqueta nao retornada na conciliacao.', 409);
+  // Sandbox tracking can still say "released" after the order detail records generation.
+  if (shipment.state === 'released' && data.status === 'released') {
+    const generation = await env.DB.prepare(
+      "SELECT 1 FROM shipment_operations WHERE shipment_id=? AND action='generate' AND state='submitted'",
+    ).bind(shipment.id).first();
+    if (generation) {
+      const detail = await providerRequest<{
+        id?: string;
+        status?: string;
+        generated_at?: string;
+      }>(env, 'shipping', '/me/orders/' + encodeURIComponent(shipment.provider_id), undefined, 'GET')
+        .catch(() => null);
+      if (detail?.id === shipment.provider_id &&
+          ['released', 'generated'].includes(detail.status ?? '') &&
+          typeof detail.generated_at === 'string' && Number.isFinite(Date.parse(detail.generated_at))) {
+        data = { ...data, status: 'generated', generated_at: detail.generated_at, updated_at: detail.generated_at };
+      }
+    }
+  }
   const updated = await applyShippingStatus(
     env,
     shipment,

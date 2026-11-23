@@ -75,6 +75,8 @@ export const settingsSchema = z
     heroTitle2: text(100).optional(),
     heroText2: text(200).optional(),
     heroImage2: mediaPath.optional(),
+    deliveryPolicy: z.string().trim().max(500).optional(),
+    orderWhatsAppMessage: z.string().trim().max(500).optional(),
     shippingOriginCep: z
       .string()
       .regex(/^\d{8}$/)

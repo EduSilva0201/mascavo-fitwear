@@ -16,7 +16,6 @@
 .campaign-cta { display: inline-flex; align-items: center; gap: 35px; background: #382115; color: #fff2e1; padding: 18px 24px; font-size: 11px; letter-spacing: 1px; transition: background .2s; }
 .campaign-cta:hover { background: #73462d; }
 .campaign-hero a:focus-visible, .campaign-hero button:focus-visible { outline: 2px solid #73462d; outline-offset: 5px; }
-.campaign-cta span { font-size: 18px; }
 .campaign-controls { position: absolute; z-index: 3; bottom: 30px; left: 6vw; display: flex; align-items: center; gap: 15px; }
 .campaign-controls[hidden] { display: none; }
 .campaign-controls > button { background: #f4e5cfad; color: #382115; border: 1px solid #73462d55; width: 36px; height: 36px; border-radius: 50%; font-size: 15px; cursor: pointer; }
@@ -65,8 +64,6 @@
 .campaign-copy > * { opacity: 1; }
 .campaign-hero .campaign-cta { min-height: 52px; padding: 15px 22px; background: #342014; border: 1px solid #342014; border-radius: 2px; }
 .campaign-hero .campaign-cta:hover { background: #64432c; border-color: #64432c; }
-.campaign-hero .campaign-cta span { transition: transform .2s ease; }
-.campaign-hero .campaign-cta:hover span { transform: translate(2px,-2px); }
 .campaign-controls { left: 7vw; bottom: 28px; }
 .campaign-hero[data-motion-paused='true'] .campaign-image, .campaign-hero[data-motion-paused='true'] .campaign-copy { animation-play-state: paused; }
 @keyframes campaign-zoom { from { transform: scale(1); } to { transform: scale(1.02); } }
@@ -88,7 +85,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
  .campaign-slide.is-active .campaign-image, .campaign-slide.is-active .campaign-copy { animation: none; }
- .campaign-hero .campaign-cta span { transition: none; }
 }
 
 /* Feather the portrait itself so its left boundary never forms a visible seam. */

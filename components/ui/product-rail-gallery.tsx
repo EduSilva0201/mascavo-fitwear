@@ -1246,7 +1246,7 @@ function Detail({ uid, item, index, total, hanger, labels, reduced, source, onLi
               {item.details.map((detail) => <li key={detail} className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">{detail}</li>)}
             </ul>
           )}
-          {item.productId && <button type="button" className="rail-shop-link" onClick={() => { shopAfterClose.current = true; dismiss(); }}>Ver fotos e escolher tamanho {"\u2197"}</button>}
+          {item.productId && <button type="button" className="rail-shop-link" onClick={() => { shopAfterClose.current = true; dismiss(); }}>Ver fotos e escolher tamanho <span className="storefront-arrow" aria-hidden="true" /></button>}
           <div role="group" aria-label={`${labels.front} / ${labels.back}`} className="mt-2 inline-flex justify-center gap-6 md:justify-start">
             {(["front", "back"] as const).map((face) => (
               <button key={face} type="button" aria-pressed={side === face} onClick={() => turnTo(face)} className={`relative pb-1.5 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring ${side === face ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}>

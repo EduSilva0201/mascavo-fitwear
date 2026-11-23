@@ -17,6 +17,7 @@ const eventSchema = z
   })
   .passthrough();
 
+webhooks.get('/asaas', (c) => c.json({ status: 'ok' }));
 webhooks.post('/asaas', async (c) => {
   const token = c.env.ASAAS_WEBHOOK_TOKEN;
   if (!token || token.length < 32) return c.json({ error: 'Webhook indisponivel.' }, 503);

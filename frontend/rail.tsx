@@ -25,7 +25,7 @@ function RailShowcase() {
    eyebrow="MASCAVO / EM MOVIMENTO" heading="Um novo olhar para cada peça."
    caption="Passe o mouse para virar. Arraste ou clique para ver de perto."
    labels={{front:'Frente',back:'Costas',close:'Fechar',show:'Mostrar'}}
-   action={<a className="rail-collection-link" href="#produtos">Explorar a coleção <span aria-hidden="true">↗</span></a>}
+   action={<a className="rail-collection-link" href="#produtos">Explorar a coleção <span className="storefront-arrow" aria-hidden="true" /></a>}
  />;
 }
 const host = document.querySelector('#clothing-rail-root');

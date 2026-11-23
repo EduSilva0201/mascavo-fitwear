@@ -2,6 +2,10 @@
 
 Ambiente separado de localhost e de produção. Apenas dados fictícios. Asaas e Melhor Envio permanecem com hosts sandbox fixados no código.
 
+## Checkout atual
+
+O checkout usa o Asaas Sandbox para cobrar o subtotal dos produtos. A entrega é combinada com a loja. O Melhor Envio fica pausado por padrão. Para retomar os testes de cotação e etiquetas, configure `MELHOR_ENVIO_ENABLED=true` no ambiente de teste e use as credenciais sandbox do provedor.
+
 ## Publicação em 19/11/2026
 
 - Worker `mascavo-fitwear-staging` publicado em `https://teste.mascavofit.com.br`, versão `d538d01a-ca6a-4aaf-be73-3dd892d80e3a`.
@@ -36,7 +40,7 @@ Ambiente separado de localhost e de produção. Apenas dados fictícios. Asaas e
 7. Validar o pacote: `npx.cmd wrangler deploy --dry-run --config wrangler.staging.jsonc`.
 8. Publicar: `npx.cmd wrangler deploy --config wrangler.staging.jsonc`.
 
-O acesso ao site e às APIs exige autenticação HTTP Basic sobre HTTPS, além do login normal da loja para operações autenticadas. Os dois endpoints POST de webhook são acessíveis aos provedores e continuam exigindo token Asaas ou assinatura Melhor Envio. Nenhum outro caminho ignora a senha de homologação.
+Visitantes entram pelo formulário de homologação sobre HTTPS. A sessão usa um cookie assinado válido por 12 horas. Clientes de API também podem usar HTTP Basic. Operações autenticadas da loja ainda exigem o login normal. Os dois endpoints POST de webhook são acessíveis aos provedores e continuam exigindo token Asaas ou assinatura Melhor Envio.
 
 Todas as respostas de homologação recebem `X-Robots-Tag: noindex, nofollow, noarchive` e `Cache-Control: no-store`. O Worker aceita apenas a origem HTTPS configurada. `workers.dev` e URLs de preview ficam desativadas.
 
@@ -54,3 +58,9 @@ O cron executa a manutenção a cada minuto, sem depender do terminal. Não comp
 ## Verificação após deploy
 
 Sem senha: página inicial e APIs retornam 401; com senha: loja carrega e health informa `staging`, `sandbox` e `production: false`. A caixa de e-mail de desenvolvimento retorna 404 mesmo com senha. Webhooks sem autenticação do provedor falham. Verificar catálogo, imagens, cookies seguros, painel, cron e integrações sandbox no domínio final de homologação.
+
+## E-mails de pedidos em homologação
+
+O cron envia **Recebemos seu pedido** depois que o pedido é registrado e **Pagamento confirmado** depois que o Asaas confirma o pagamento. Todos os envios de homologação têm o prefixo **[Teste]** e usam exclusivamente a caixa de teste configurada. Sem a configuração completa, os pedidos novos usam a caixa simulada.
+
+Verifique o domínio remetente no Resend e cadastre `RESEND_API_KEY`, `ORDER_EMAIL_FROM` (remetente autorizado no Resend) e `ORDER_EMAIL_TEST_TO` (caixa que receberá os testes) como secrets do Worker de homologação. Aplique a migração `0017_order_email.sql` antes de publicar o Worker. Em **E-mails de teste**, o painel mostra se o provedor aceitou a mensagem ou se o envio requer revisão.

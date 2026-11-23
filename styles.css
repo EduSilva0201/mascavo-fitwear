@@ -805,7 +805,7 @@ footer {
   background: white;
   color: #261307;
 }
-.account-modal p {
+.account-modal p:not(.form-feedback) {
   line-height: 1.5;
   font-size: 13px;
 }
@@ -1295,7 +1295,7 @@ footer {
 /* Sandbox integration controls in the shopping bag. */
 .sandbox-tests { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #ded6cb; }
 .sandbox-tests summary { cursor: pointer; font-weight: 600; }
-.sandbox-tests p { margin: .75rem 0; font-size: .85rem; line-height: 1.5; }
+.sandbox-tests p:not(.form-feedback) { margin: .75rem 0; font-size: .85rem; line-height: 1.5; }
 .sandbox-tests label { display: grid; gap: .4rem; margin: 1rem 0; }
 .sandbox-tests input { padding: .75rem; border: 1px solid #b8aa9d; border-radius: 4px; width: 100%; box-sizing: border-box; }
 .sandbox-tests button { padding: .7rem; border: 1px solid #b8aa9d; border-radius: 4px; margin: .25rem .25rem .25rem 0; cursor: pointer; }

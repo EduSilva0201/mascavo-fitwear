@@ -5,6 +5,7 @@ import type { Env } from './env';
 import auth from './modules/auth/routes';
 import catalog from './modules/catalog/routes';
 import integrations from './modules/integrations/routes';
+import shippingOAuth from './modules/integrations/shipping-oauth';
 import admin from './modules/admin/routes';
 import { publicContent } from './modules/content/routes';
 import { csrfCookie, currentSession } from './modules/auth/session';
@@ -12,51 +13,69 @@ import { equal } from './modules/auth/crypto';
 import webhooks from './modules/webhooks/routes';
 import orders from './modules/orders/routes';
 import { maintenance } from './modules/orders/events';
+import { checkStagingAccess } from './staging-access';
+import { checkoutEnabled, deliveryTerms, integratedShippingEnabled, isProduction, paymentMethods } from './commerce-environment';
+import { pilotDelivery } from './commerce-environment';
+import { isCheckoutPilot } from './checkout-pilot';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', async (c, next) => {
   const url = new URL(c.req.url);
   const local = c.env.APP_ENV === 'local' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
   const staging = c.env.APP_ENV === 'staging' && url.protocol === 'https:';
-  if ((!local && !staging) || url.origin !== c.env.APP_ORIGIN)
+  const production = isProduction(c.env) && url.protocol === 'https:';
+  if ((!local && !staging && !production) || url.origin !== c.env.APP_ORIGIN)
     return c.json({ error: 'Ambiente remoto ainda não habilitado.' }, 503);
   if (staging) {
     c.header('X-Robots-Tag', 'noindex, nofollow, noarchive');
     c.header('Cache-Control', 'no-store');
-    // Only these two POST endpoints bypass the gate; each authenticates its provider.
-    const webhook = c.req.method === 'POST' && ['/api/v1/webhooks/asaas', '/api/v1/webhooks/melhorenvio'].includes(url.pathname);
-    if (!webhook) {
-      if (!c.env.STAGING_USERNAME || !c.env.STAGING_PASSWORD || c.env.STAGING_PASSWORD.length < 24)
-        return c.json({ error: 'Configure o acesso restrito da homologacao.' }, 503);
-      const expected = `Basic ${btoa(`${c.env.STAGING_USERNAME}:${c.env.STAGING_PASSWORD}`)}`;
-      if (!equal(c.req.header('Authorization') || '', expected)) {
-        c.header('WWW-Authenticate', 'Basic realm="Mascavo homologacao", charset="UTF-8"');
-        return c.json({ error: 'Homologacao restrita.' }, 401);
-      }
-    }
+    const access = await checkStagingAccess(c, url);
+    if (access) return access;
   }
   await next();
   c.header('X-Content-Type-Options', 'nosniff');
-  c.header('Referrer-Policy', 'no-referrer');
+  if (!c.res.headers.has('Referrer-Policy')) c.header('Referrer-Policy', 'no-referrer');
   c.header('X-Frame-Options', 'DENY');
-  if (staging) c.header('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  if (staging || (production && !checkoutEnabled(c.env))) c.header('X-Robots-Tag', 'noindex, nofollow, noarchive');
   if (staging || url.pathname.startsWith('/api/')) c.header('Cache-Control', 'no-store');
 });
 app.use(
   '/api/*',
   async (c,next) => bodyLimit({ maxSize: c.req.path === '/api/v1/admin/media' ? 5*1024*1024 : c.req.path.startsWith('/api/v1/admin/') ? 65536 : 8192, onError: (ctx) => ctx.json({ error: 'Requisição muito grande.' }, 413) })(c,next),
 );
-app.get('/api/v1/health', (c) => c.json({ status: 'ok', environment: c.env.APP_ENV, checkout: 'sandbox', production: false }));
+app.use(async (c, next) => {
+  if (!integratedShippingEnabled(c.env) && [
+    /^\/integracoes\/melhorenvio(?:\/|$)/,
+    /^\/api\/v1\/(?:webhooks\/melhorenvio|integrations\/(?:shipping|payments))(?:\/|$)/,
+    /^\/api\/v1\/orders\/(?:shipping-settings|sku-package|[^/]+\/shipment)(?:\/|$)/,
+  ].some(path => path.test(c.req.path))) return c.json({ error: 'Melhor Envio pausado.' }, 404);
+  await next();
+});
+app.get('/api/v1/health', async (c) => {
+  const pilot = await isCheckoutPilot(c);
+  return c.json({
+  status: 'ok',
+  environment: c.env.APP_ENV,
+  checkout: isProduction(c.env) ? (checkoutEnabled(c.env) || pilot ? 'live' : 'closed') : 'sandbox',
+  production: isProduction(c.env),
+  integratedShipping: integratedShippingEnabled(c.env),
+  ...(isProduction(c.env) && checkoutEnabled(c.env) ? { delivery: deliveryTerms(c.env), paymentMethods: paymentMethods(c.env) } : {}),
+  ...(pilot ? { pilot: true, delivery: pilotDelivery, paymentMethods: ['PIX'] } : {}),
+  });
+});
 app.route('/api/v1/auth', auth);
 app.route('/api/v1/webhooks', webhooks);
 app.route('/api/v1/orders', orders);
 app.route('/api/v1/catalog', catalog);
 app.route('/api/v1/integrations', integrations);
+app.route('/integracoes/melhorenvio', shippingOAuth);
 app.route('/api/v1/admin', admin);
 app.route('/api/v1/content', publicContent);
 app.get('/api/v1/store',async c=>{
   const row=await c.env.DB.prepare('SELECT data FROM store_settings WHERE id=1').first<{data:string}>();
-  return c.json({settings:row?JSON.parse(row.data):{}});
+  const settings = row ? JSON.parse(row.data) : {};
+  delete settings.orderWhatsAppMessage;
+  return c.json({ settings });
 });
 app.get('/media/:key',async c=>{
   const key=c.req.param('key');
@@ -93,7 +112,7 @@ app.onError((error, c) => {
 export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
-    if (env.APP_ENV !== 'staging') return;
+    if (env.APP_ENV !== 'staging' && !isProduction(env)) return;
     ctx.waitUntil(maintenance(env));
   },
 };

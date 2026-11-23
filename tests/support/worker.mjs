@@ -39,6 +39,7 @@ export async function createWorker({ bindings = {} } = {}) {
       r2Persist: false,
       bindings: {
         APP_ENV: 'local',
+        MELHOR_ENVIO_ENABLED: 'true',
         APP_ORIGIN: origin,
         ASAAS_API_KEY: 'fixture-asaas-not-a-real-key',
         ASAAS_WEBHOOK_TOKEN: 'fixture-webhook-token-with-at-least-32-characters',
@@ -60,7 +61,8 @@ export async function createWorker({ bindings = {} } = {}) {
           body = await request.json().catch(() => null);
         const call = { host: url.hostname, path: url.pathname, method: request.method, body };
         calls.push(call);
-        if (!['api-sandbox.asaas.com', 'sandbox.melhorenvio.com.br'].includes(url.hostname)) {
+        if (url.hostname === 'api.resend.com') call.idempotencyKey = request.headers.get('Idempotency-Key');
+        if (!['api-sandbox.asaas.com', 'api.asaas.com', 'sandbox.melhorenvio.com.br', 'api.resend.com'].includes(url.hostname)) {
           unexpected.push(call.host);
           return Response.json({ error: 'Network blocked by tests' }, { status: 599 });
         }
@@ -127,7 +129,7 @@ export async function createWorker({ bindings = {} } = {}) {
       if (profile)
         await db
           .prepare('INSERT INTO customer_profiles VALUES (?,?,?,?)')
-          .bind(id, '52998224725', '', time)
+          .bind(id, '52998224725', '11999990000', time)
           .run();
       return {
         id,

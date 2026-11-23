@@ -44,10 +44,18 @@ integrations.use('*', async (c, next) => {
   }
   await next();
 });
-integrations.get('/status', c => c.json({ sandbox: true,
-  asaas: Boolean(c.env.ASAAS_API_KEY),
-  melhorEnvio: Boolean(c.env.MELHOR_ENVIO_TOKEN && c.env.MELHOR_ENVIO_USER_AGENT && c.env.SHIPPING_ORIGIN_CEP),
-}));
+integrations.get('/status', async c => {
+  const env = c.env;
+  const enabled = env.MELHOR_ENVIO_ENABLED === 'true';
+  const stored = enabled && env.APP_ENV === 'staging' && await env.DB.prepare(
+    "SELECT 1 FROM integration_tokens WHERE provider='shipping'",
+  ).first();
+  return c.json({
+    sandbox: true,
+    asaas: Boolean(env.ASAAS_API_KEY),
+    melhorEnvio: Boolean(enabled && (stored || env.MELHOR_ENVIO_TOKEN) && env.MELHOR_ENVIO_USER_AGENT && env.SHIPPING_ORIGIN_CEP),
+  });
+});
 integrations.post('/shipping/quote', async c => {
   const parsed = z.object({ items: itemsSchema, cep: z.string().regex(/^\d{8}$/) }).strict().safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'Confira o CEP e os itens da sacola.' }, 400);

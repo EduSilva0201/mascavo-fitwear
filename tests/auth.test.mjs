@@ -24,6 +24,7 @@ let server,
 const password = 'Ficticia!Mascavo-2026';
 const newPassword = 'Outra!Ficticia-2026';
 const email = 'cliente@example.test';
+const signupFields = { cpf: '52998224725', phone: '+55 (11) 99999-0000' };
 
 class Client {
   cookies = new Map();
@@ -82,6 +83,8 @@ before(async () => {
       '8791',
       '--var',
       `APP_ORIGIN:${origin}`,
+      '--var',
+      'MELHOR_ENVIO_ENABLED:true',
       '--persist-to',
       state,
     ],
@@ -157,20 +160,26 @@ test('bloqueia origem externa, CSRF ausente, JSON inválido e payload excessivo'
 });
 test('cadastro seguro, duplicidade genérica e confirmação de e-mail de uso único', async (t) => {
   const start = performance.now();
+  const missingPhone = await client.auth('register', { name: 'Cliente Ficticio', email, password, cpf: signupFields.cpf });
+  assert.equal(missingPhone.status, 400);
   const r = await client.auth('register', {
     name: 'Cliente Fictício',
     email: 'Cliente@Example.Test',
     password,
+    ...signupFields,
   });
   t.diagnostic(
     `Cadastro com Argon2id no workerd local: ${Math.round(performance.now() - start)} ms (tempo total HTTP).`,
   );
   assert.equal(r.status, 202);
-  const duplicate = await client.auth('register', { name: 'Outro Nome', email, password });
+  const duplicate = await client.auth('register', { name: 'Outro Nome', email, password, ...signupFields });
   assert.deepEqual(duplicate.body, r.body);
   assert.equal(duplicate.status, 202);
   const row = database.prepare('SELECT * FROM customers WHERE email=?').get(email);
   assert.equal(row.role, 'customer');
+  const savedProfile = database.prepare('SELECT cpf,phone FROM customer_profiles WHERE customer_id=?').get(row.id);
+  assert.equal(savedProfile.cpf, signupFields.cpf);
+  assert.equal(savedProfile.phone, '11999990000');
   assert.notEqual(row.password_hash, password);
   assert.match(row.password_hash, /^argon2id\$v=19\$m=19456,t=2,p=1\$/);
   assert.equal(database.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 1);
@@ -289,6 +298,8 @@ test('navegador: vitrine, sacola, cadastro, login, sessão persistente e logout'
     await page.locator('[data-account-tab="register"]').click();
     await page.locator('[name="name"]').fill('Cliente Visual Fictício');
     await page.locator('[name="email"]').fill('visual@example.test');
+    await page.locator('[name="cpf"]').fill(signupFields.cpf);
+    await page.locator('[name="phone"]').fill(signupFields.phone);
     await page.locator('[name="password"]').fill(password);
     await page.locator('[name="confirm"]').fill(password);
     const registration = page.waitForResponse((r) => r.url().endsWith('/auth/register'));
@@ -302,6 +313,12 @@ test('navegador: vitrine, sacola, cadastro, login, sessão persistente e logout'
     await page.locator('#account-submit').click();
     await page.getByRole('button', { name: 'Sair da conta', exact: true }).waitFor();
     assert.match(await page.locator('#account-extra').innerText(), /Cliente Visual Fictício/);
+    const verification = database.prepare("SELECT token FROM dev_mail WHERE recipient='visual@example.test' AND purpose='verify'").get();
+    await page.goto(origin + '/?acesso=teste#mascavo-confirmar=' + verification.token);
+    assert.equal(await page.getByLabel('Código do e-mail Confirme seu e-mail').inputValue(), verification.token);
+    assert.equal(new URL(page.url()).hash, '');
+    await page.getByRole('button', { name: 'Confirmar e-mail', exact: true }).click();
+    await page.getByText(/Seu e-mail foi confirmado|E-mail confirmado/).first().waitFor();
     await page.reload();
     await page.locator('#account-toggle').click();
     await page.getByRole('button', { name: 'Sair da conta', exact: true }).waitFor();
@@ -360,13 +377,14 @@ test('profile: validation, persistence, CSRF and address ownership', async () =>
  for (const [i, person] of [owner,other].entries()) {
   await person.init();
   const email = `profile-${i}@example.test`;
-  assert.equal((await person.auth('register',{name:'Cliente Teste',email,password})).status,202);
+  assert.equal((await person.auth('register',{name:'Cliente Teste',email,password,...signupFields})).status,202);
   assert.equal((await person.auth('login',{email,password})).status,200);
  }
  assert.equal((await owner.auth('profile',{name:'Cliente Atualizado',cpf:'11111111111',phone:''})).status,400);
  assert.equal((await owner.auth('profile',{name:'Cliente Atualizado',cpf:'',phone:'11999990000'},{'X-CSRF-Token':'bad'})).status,403);
  await owner.init();
- assert.equal((await owner.auth('profile',{name:'Cliente Atualizado',cpf:'',phone:'11999990000'})).status,200);
+ assert.equal((await owner.auth('profile',{name:'Cliente Atualizado',cpf:signupFields.cpf,phone:''})).status,400);
+ assert.equal((await owner.auth('profile',{name:'Cliente Atualizado',...signupFields})).status,200);
  const address = {label:'Casa teste',recipient:'Cliente Teste',cep:'01001000',street:'Rua Ficticia',number:'10',complement:'',neighborhood:'Centro',city:'Sao Paulo',state:'SP'};
  assert.equal((await owner.auth('profile/addresses',{...address,cep:'123'})).status,400);
  assert.equal((await owner.auth('profile/addresses',address)).status,200);
@@ -436,6 +454,9 @@ test('sandbox: sacola mostra testes e exige login antes de consultar provedores'
     await page.waitForFunction(() => document.querySelector('.sandbox-tests [role="status"]').textContent.includes('Entre na sua conta'));
     assert.equal(await page.locator('#cart-summary > .primary').isDisabled(), true);
     assert.equal(await page.locator('[data-sandbox-quote]').isEnabled(), true);
+    const feedback = page.locator('.sandbox-tests [role="status"]');
+    assert.equal(await feedback.getAttribute('data-kind'), 'error');
+    assert.equal(await feedback.evaluate(el => getComputedStyle(el).fontSize), '15px');
   } finally { await browser.close(); }
 });
 
@@ -444,9 +465,11 @@ test('checkout: seleciona frete, soma total e envia crédito em até 3x', async 
   try {
     const page = await browser.newPage();
     let submitted;
+    const invoiceUrl = 'https://sandbox.asaas.com/i/test';
+    await page.route(invoiceUrl, route => route.fulfill({ body: 'Pagamento Asaas' }));
     await page.route('**/api/v1/integrations/shipping/quote', route => route.fulfill({ json: { quoteId: '11111111-1111-4111-8111-111111111111', expiresAt: Math.floor(Date.now()/1000)+600, subtotalCents: 17000, rates: [{ id: '1', name: 'PAC', company: 'Correios', priceCents: 2206, days: 5 },{ id: '2', name: 'SEDEX', company: 'Correios', priceCents: 4183, days: 2 }] } }));
-    await page.route('**/api/v1/auth/profile', route => route.fulfill({json:{profile:{},addresses:[{id:'22222222-2222-4222-8222-222222222222',label:'Casa',street:'Rua Teste',number:'1',cep:'04794000'}]}}));
-    await page.route('**/api/v1/orders', route => { submitted = route.request().postDataJSON(); return route.fulfill({ json: { orderId:'33333333-3333-4333-8333-333333333333',invoiceUrl: 'https://sandbox.asaas.com/i/test', amountCents: 19206 } }); });
+    await page.route('**/api/v1/auth/profile', route => route.fulfill({json:{profile:signupFields,addresses:[{id:'22222222-2222-4222-8222-222222222222',label:'Casa',street:'Rua Teste',number:'1',cep:'04794000'}]}}));
+    await page.route('**/api/v1/orders', route => { submitted = route.request().postDataJSON(); return route.fulfill({ json: { orderId:'33333333-3333-4333-8333-333333333333',invoiceUrl, amountCents: 19206 } }); });
     await page.goto(origin);
     await page.evaluate(() => localStorage.setItem('mascavo-cart',JSON.stringify([{ id:14, color:'Preto',size:'M',qty:1 }])));
     await page.reload(); await page.waitForSelector('.product'); await page.locator('#cart-toggle').click();
@@ -457,15 +480,105 @@ test('checkout: seleciona frete, soma total e envia crédito em até 3x', async 
     assert.match(await page.locator('.checkout-total').innerText(),/192,06/);
     await page.locator('[name="billing-type"]').selectOption('CREDIT_CARD');
     assert.equal(await page.locator('[name="installments"] option').count(),3);
-    await page.locator('[name="installments"]').selectOption('3'); await page.locator('[data-sandbox-payment]').click();
-    await page.locator('.sandbox-results a').waitFor();
-    assert.equal(submitted.billingType,'CREDIT_CARD'); assert.equal(submitted.installments,3); assert.equal(submitted.serviceId,'1');
-    assert.equal('amountCents' in submitted,false);
     await page.locator('[name="billing-type"]').selectOption('PIX');
     assert.equal(await page.locator('[name="installments"]').inputValue(),'1');
     await page.locator('[name="sandbox-cep"]').fill('01001000');
     assert.equal(await page.locator('[data-sandbox-payment]').isDisabled(),true);
-    assert.equal(await page.locator('.sandbox-results a').count(),0);
+    await page.locator('[name="sandbox-cep"]').fill('04794000');
+    await page.locator('[data-sandbox-quote]').click();
+    await page.locator('[name="shipping-service"][value="1"]').check();
+    await page.locator('[name="billing-type"]').selectOption('CREDIT_CARD');
+    await page.locator('[name="installments"]').selectOption('3');
+    await Promise.all([
+      page.waitForURL(invoiceUrl),
+      page.locator('[data-sandbox-payment]').click(),
+    ]);
+    assert.equal(submitted.billingType,'CREDIT_CARD'); assert.equal(submitted.installments,3); assert.equal(submitted.serviceId,'1');
+    assert.equal('amountCents' in submitted,false);
+  } finally { await browser.close(); }
+});
+
+test('checkout: opens Asaas automatically without a shipping quote when the invoice is ready', async () => {
+  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  try {
+    const page = await browser.newPage();
+    const invoiceUrl = 'https://sandbox.asaas.com/i/checkout';
+    const orderId = '33333333-3333-4333-8333-333333333333';
+    const addressId = '22222222-2222-4222-8222-222222222222';
+    const attempts = [];
+    await page.route('**/api/v1/health', route => route.fulfill({ json: { integratedShipping: false } }));
+    await page.route('**/api/v1/store', route => route.fulfill({
+      json: { settings: { deliveryPolicy: 'Consulte a disponibilidade para seu bairro.', whatsapp: '11987654321' } },
+    }));
+    await page.route('**/api/v1/auth/profile', route => route.fulfill({ json: { profile: signupFields, addresses: [{ id: addressId, label: 'Casa', street: 'Rua Teste', number: '1', cep: '04794000' }] } }));
+    await page.route(invoiceUrl, route => route.fulfill({ body: 'Pagamento Asaas' }));
+    await page.route('**/api/v1/orders', route => {
+      attempts.push(route.request().postDataJSON());
+      return attempts.length === 1
+        ? route.fulfill({ status: 202, json: { orderId, invoiceUrl: null } })
+        : route.fulfill({ status: 201, json: { orderId, invoiceUrl } });
+    });
+    await page.goto(origin);
+    await page.evaluate(() => localStorage.setItem('mascavo-cart', JSON.stringify([{ id: 14, color: 'Preto', size: 'M', qty: 1 }])));
+    await page.reload();
+    await page.locator('.product').first().waitFor();
+    assert.equal(await page.locator('.footer-trust').getByText('Entrega pela loja', { exact: true }).count(), 1);
+    await page.locator('#cart-toggle').click();
+    await page.locator('#checkout-address-hint').waitFor();
+    await page.locator('.sandbox-tests').getByText(/^Entrega pela loja\./).waitFor();
+    await page.locator('.sandbox-tests').getByText('Consulte a disponibilidade para seu bairro.').waitFor();
+    assert.equal(await page.locator('.sandbox-tests').getByRole('link', { name: /WhatsApp/ }).getAttribute('href'), 'https://wa.me/5511987654321');
+    await page.locator('[name="order-address"]').selectOption(addressId);
+    assert.equal(await page.locator('#checkout-address-hint').isHidden(), true);
+    const pay = page.locator('[data-sandbox-payment]');
+    assert.equal(await page.locator('[data-sandbox-quote]').isHidden(), true);
+    await pay.click();
+    await page.getByText(/aguardando revis.o da cobran.a/).waitFor();
+    assert.equal(new URL(page.url()).origin, origin);
+    await Promise.all([page.waitForURL(invoiceUrl), pay.click()]);
+    assert.deepEqual(attempts[0], attempts[1]);
+    assert.equal('quoteId' in attempts[0], false);
+  } finally { await browser.close(); }
+});
+
+test('checkout: production shows delivery and total before opening the live Asaas invoice', async () => {
+  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  try {
+    const page = await browser.newPage();
+    const addressId = '22222222-2222-4222-8222-222222222222';
+    const invoiceUrl = 'https://www.asaas.com/i/fixture';
+    let checkout = 'closed';
+    let submitted;
+    await page.route('**/api/v1/health', route => route.fulfill({ json: {
+      checkout, production: true, integratedShipping: false, paymentMethods: ['PIX'],
+      delivery: { feeCents: 1500, cepPrefixes: ['047'], estimate: 'Até 3 dias úteis' },
+    } }));
+    await page.route('**/api/v1/auth/profile', route => route.fulfill({ json: { profile: signupFields, addresses: [
+      { id: addressId, label: 'Casa', street: 'Rua Teste', number: '1', cep: '04794000' },
+    ] } }));
+    await page.route('**/api/v1/orders', route => {
+      submitted = route.request().postDataJSON();
+      return route.fulfill({ json: { invoiceUrl } });
+    });
+    await page.route(invoiceUrl, route => route.fulfill({ body: 'Pagamento simulado' }));
+    await page.goto(origin);
+    await page.evaluate(() => localStorage.setItem('mascavo-cart', JSON.stringify([{ id: 14, color: 'Preto', size: 'M', qty: 1 }])));
+    await page.reload();
+    await page.locator('.product').first().waitFor();
+    await page.locator('#cart-toggle').click();
+    await page.getByText('As vendas online ainda não estão abertas.').waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Continuar para pagamento' }).count(), 0);
+    checkout = 'live';
+    await page.reload();
+    await page.locator('.product').first().waitFor();
+    await page.locator('#cart-toggle').click();
+    await page.locator('[name="order-address"]').selectOption(addressId);
+    await page.getByText(/Prazo estimado.*3 dias úteis/).waitFor();
+    assert.match(await page.locator('.checkout-total').innerText(), /15,00.*Total a pagar/);
+    assert.deepEqual(await page.locator('[name="billing-type"] option').allTextContents(), ['Pix']);
+    await Promise.all([page.waitForURL(invoiceUrl), page.getByRole('button', { name: 'Continuar para pagamento' }).click()]);
+    assert.equal(submitted.billingType, 'PIX');
+    assert.ok(submitted.expectedAmountCents > 1500);
   } finally { await browser.close(); }
 });
 
@@ -477,6 +590,12 @@ test('modern dialogs: login, senha visível, cadastro e sacola responsivos', asy
     await page.goto(origin); await page.waitForSelector('.product');
     await page.locator('#account-toggle').click();
     await page.locator('.signin-card').waitFor();
+    await page.locator('#account-submit').click();
+    const feedback = page.locator('#account-feedback');
+    await feedback.waitFor();
+    assert.equal(await feedback.innerText(), 'Preencha o campo E-mail.');
+    assert.equal(await feedback.evaluate(el => getComputedStyle(el).fontSize), '15px');
+    assert.equal(await page.locator('#account-fields input[name="email"]').getAttribute('aria-invalid'), 'true');
     await page.locator('#account-fields input[name="email"]').fill('cliente@example.test');
     await page.locator('#account-fields input[name="password"]').fill('SenhaTeste123!');
     await page.locator('.password-toggle').click();
@@ -484,7 +603,7 @@ test('modern dialogs: login, senha visível, cadastro e sacola responsivos', asy
     await mkdir('test-results',{recursive:true});
     await page.screenshot({path:'test-results/modern-login-desktop.png'});
     await page.locator('[data-account-tab="register"]').click();
-    assert.equal(await page.locator('#account-fields input').count(),4);
+    assert.equal(await page.locator('#account-fields input').count(),6);
     await page.locator('[data-account-tab="login"]').click();
     await page.setViewportSize({width:390,height:844});
     const bounds=await page.locator('#account-dialog').boundingBox();
@@ -505,7 +624,7 @@ test('modern dialogs: login, senha visível, cadastro e sacola responsivos', asy
 test('admin: autoriza por papel, gerencia produto, estoque, imagens e configuracoes', async () => {
   const staff=new Client();await staff.init();
   const staffEmail='admin@example.test';
-  assert.equal((await staff.auth('register',{name:'Gestora Teste',email:staffEmail,password})).status,202);
+  assert.equal((await staff.auth('register',{name:'Gestora Teste',email:staffEmail,password,...signupFields})).status,202);
   database.prepare('UPDATE customers SET email_verified_at=? WHERE email=?').run(Math.floor(Date.now()/1000),staffEmail);
   assert.equal((await staff.auth('login',{email:staffEmail,password})).status,200);
   assert.equal((await staff.call('/api/v1/admin/catalog')).status,403);
@@ -547,6 +666,31 @@ test('admin: autoriza por papel, gerencia produto, estoque, imagens e configurac
     const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(origin+'/admin');await page.locator('#admin-shell:not([hidden])').waitFor();
     await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/admin-overview.png'});
+    await page.locator('.sidebar [data-page="sales"]').click();
+    await page.getByText('Nenhum pedido foi criado neste período.').waitFor();
+    await page.route('**/sales-report?days=7', async route => {
+      const response = await route.fetch();
+      const report = await response.json();
+      report.sales = [
+        { day: report.dates[0], method: 'PIX', state: 'paid', orders: 2, amountCents: 24680 },
+        { day: report.dates[0], method: 'PIX', state: 'pending', orders: 1, amountCents: 9900 },
+      ];
+      report.products = [{ id: 14, name: 'Produto de teste', units: 2 }];
+      await route.fulfill({ response, json: report });
+    });
+    const reportRequest = page.waitForResponse(response => response.url().endsWith('/sales-report?days=7'));
+    await page.getByLabel('Período').selectOption('7');
+    assert.equal((await reportRequest).status(), 200);
+    await page.getByText('Produto de teste', { exact: true }).waitFor();
+    assert.match(await page.locator('.sales-revenue dd').innerText(), /246,80/);
+    assert.equal(await page.locator('.sales-bars > div').count(), 7);
+    await page.getByText('Ver dados por dia', { exact: true }).click();
+    assert.match(await page.locator('.sales-table tbody tr').first().innerText(), /246,80/);
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Exportar CSV' }).click();
+    const download = await downloadPromise;
+    assert.match(download.suggestedFilename(), /^mascavo-vendas-.*\.csv$/);
+    assert.match(readFileSync(await download.path(), 'utf8'), /;3;2;246,80/);
     await page.locator('.sidebar [data-page="products"]').click();await page.locator('[data-edit]').first().click();
     await page.locator('#editor[open]').waitFor();await page.locator('[name="name"]').fill('Edicao sem salvar');
     await page.locator('#editor [data-close]').first().click();await page.locator('#confirm-dialog[open]').waitFor();await page.locator('#keep-editing').click();
@@ -556,11 +700,26 @@ test('admin: autoriza por papel, gerencia produto, estoque, imagens e configurac
     await page.locator('.sidebar [data-page="settings"]').click();
     await page.locator('[name="shippingOriginCep"]').fill('73060604');
     await page.locator('[name="shippingWeightKg"]').fill('0.3');
+    await page.locator('[name="orderWhatsAppMessage"]').fill('Olá, {nome}! Seu pedido é {pedido}.');
     await page.locator('#settings-form button').click();
     await page.waitForFunction(()=>document.querySelector('#notification').textContent.includes('aplicadas'));
     assert.equal((await staff.call('/api/v1/store')).body.settings.shippingOriginCep,'73060604');
+    assert.equal('orderWhatsAppMessage' in (await staff.call('/api/v1/store')).body.settings, false);
+    const orderId = '33333333-3333-4333-8333-333333333333';
+    await page.route('**/orders/manage', route => route.fulfill({ json: { orders: [{
+      id: orderId, amount_cents: 16000, payment_state: 'paid', reservation_state: 'active',
+    }] } }));
+    await page.route('**/orders/' + orderId, route => route.fulfill({ json: { order: {
+      contactPhone: '11999990000',
+      paymentState: 'paid',
+      snapshot: { customer: { name: 'Cliente Teste' }, address: { recipient: 'Cliente Teste', street: 'Rua Teste', number: '1', cep: '04794000' }, items: [] },
+    }, shipments: [] } }));
     await page.locator('.sidebar [data-page="orders"]').click();
     await page.locator('#commerce-orders').waitFor();
+    await page.getByRole('button', { name: 'Abrir pedido' }).click();
+    const whatsapp = new URL(await page.getByRole('link', { name: 'Conversar no WhatsApp' }).getAttribute('href'));
+    assert.equal(whatsapp.origin + whatsapp.pathname, 'https://wa.me/5511999990000');
+    assert.equal(whatsapp.searchParams.get('text'), 'Olá, Cliente Teste! Seu pedido é 33333333.');
     await page.locator('.sidebar [data-page="fulfillment"]').click();
     await page.locator('#sender-form').waitFor();
     for (const [key,value] of Object.entries({name:'Mascavo Teste',company_document:'12345678000195',state_register:'123456789',phone:'61999999999',email:'loja@example.test',postal_code:'73060604',address:'Rua Teste',number:'1',district:'Centro',city:'Brasilia',state_abbr:'DF'}))
@@ -665,7 +824,7 @@ test('preloader: initial entry, reload, mobile, image failures, reduced motion a
 
 test('editorial: admin publica depoimentos e FAQ com visual acessivel na loja',async()=>{
   const staff=new Client();await staff.init();const staffEmail='editorial@example.test';
-  assert.equal((await staff.auth('register',{name:'Editora Teste',email:staffEmail,password})).status,202);
+  assert.equal((await staff.auth('register',{name:'Editora Teste',email:staffEmail,password,...signupFields})).status,202);
   database.prepare("UPDATE customers SET role='admin',email_verified_at=? WHERE email=?").run(Math.floor(Date.now()/1000),staffEmail);
   assert.equal((await staff.auth('login',{email:staffEmail,password})).status,200);
   const browser=await chromium.launch({channel:'chrome',headless:true});
@@ -700,6 +859,8 @@ test('editorial: admin publica depoimentos e FAQ com visual acessivel na loja',a
     await page.locator('#content-save').click();await page.locator('#content-editor').waitFor({state:'hidden'});
     await page.goto(origin+'/duvidas-frequentes');await page.locator('#faq-list details').first().waitFor();
     assert.equal(await page.locator('#faq-retry').isVisible(),false);
+    await page.getByText('Como funciona a entrega?', { exact: true }).click();
+    assert.match(await page.locator('#faq-list details[open] .faq-answer').innerText(), /^Entrega pela loja\./);
     await page.locator('#faq-search').fill('cuidar');assert.equal(await page.locator('#faq-list details').count(),1);
     await page.locator('#faq-list summary').click();assert.match(await page.locator('.faq-answer').innerText(),/fabricante/);
     await page.screenshot({path:'test-results/faq-desktop.png',fullPage:true});

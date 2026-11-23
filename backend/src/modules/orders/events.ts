@@ -2,13 +2,17 @@ import type { Env } from '../../env';
 import { getOrder, expireReservations, reconcilePayment, deliverLocalMail } from './service';
 import { applyShippingStatus, reconcileShipment, type Shipment } from './shipping';
 import { now } from '../auth/session';
+import { sendOrderMail } from './mail';
+import { sendAccountMail } from '../auth/mail';
+import { integratedShippingEnabled } from '../../commerce-environment';
 
 export async function processEvents(env: Env) {
   const deadline = Date.now() + 10000;
   await expireReservations(env);
   const events = await env.DB.prepare(
-    "SELECT * FROM commerce_events WHERE state='pending' ORDER BY received_at LIMIT 25",
-  ).all<{ provider: string; id: string; resource_id: string; payload_json: string }>();
+    "SELECT * FROM commerce_events WHERE state='pending' AND (provider='asaas' OR ?=1) ORDER BY received_at LIMIT 25",
+  ).bind(integratedShippingEnabled(env) ? 1 : 0)
+    .all<{ provider: string; id: string; resource_id: string; payload_json: string }>();
   for (const event of events.results) {
     if (Date.now() > deadline) break;
     try {
@@ -68,6 +72,8 @@ export async function processEvents(env: Env) {
 }
 export async function maintenance(env: Env) {
   const result = await processEvents(env);
+  await sendOrderMail(env).catch(() => console.error('order_email_processing_failed'));
+  await sendAccountMail(env).catch(() => console.error('account_email_processing_failed'));
   const payments = await env.DB.prepare(
         "SELECT id FROM orders WHERE payment_state IN ('pending','creating','review','paid') AND checked_at<? ORDER BY checked_at LIMIT 1",
   )
@@ -79,6 +85,7 @@ export async function maintenance(env: Env) {
     } catch {}
     await env.DB.prepare('UPDATE orders SET checked_at=? WHERE id=?').bind(now(), id).run();
   }
+  if (!integratedShippingEnabled(env)) return result;
   const shipments = await env.DB.prepare(
         "SELECT * FROM shipments WHERE provider_id IS NOT NULL AND state NOT IN ('cancelled','delivered') AND updated_at<? ORDER BY updated_at LIMIT 1",
   )

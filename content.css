@@ -537,3 +537,29 @@ body.faq-page {
     display: none;
   }
 }
+.storefront-arrow {
+  display: inline-block;
+  position: relative;
+  flex: 0 0 auto;
+  width: 0.9em;
+  height: 0.9em;
+  vertical-align: -0.05em;
+  transform: rotate(-45deg);
+}
+.storefront-arrow::before {
+  content: '';
+  position: absolute;
+  inset: 50% 0.12em auto 0;
+  border-top: 1px solid currentColor;
+}
+.storefront-arrow::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0.1em;
+  width: 0.36em;
+  height: 0.36em;
+  border-top: 1px solid currentColor;
+  border-right: 1px solid currentColor;
+  transform: translateY(-50%) rotate(45deg);
+}

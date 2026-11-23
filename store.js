@@ -1,8 +1,27 @@
 // Public settings contain editorial/contact data only, never credentials.
-fetch('/api/v1/store')
+window.storeSettingsReady = fetch('/api/v1/store')
   .then((r) => (r.ok ? r.json() : null))
-  .then((data) => {
-    const s = data?.settings;
+  .then((data) => data?.settings ?? null)
+  .catch(() => null);
+
+window.deliveryContactLink = (settings) => {
+  const phone = settings?.whatsapp;
+  const email = settings?.contactEmail;
+  if (!phone && !email) return null;
+  const link = document.createElement('a');
+  link.textContent = phone ? 'Combinar entrega pelo WhatsApp' : 'Combinar entrega por e-mail';
+  if (phone) {
+    link.href = 'https://wa.me/' + (phone.length <= 11 ? '55' + phone : phone);
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+  } else {
+    link.href = 'mailto:' + email;
+  }
+  return link;
+};
+
+window.storeSettingsReady
+  .then((s) => {
     if (!s) return;
     if (s.storeName) document.title = s.storeName + ' | Fitwear';
     document.querySelectorAll('.campaign-slide').forEach((slide, index) => {
@@ -13,7 +32,7 @@ fetch('/api/v1/store')
       if (s['heroImage' + n]) slide.querySelector('.campaign-image').src = s['heroImage' + n];
     });
     const footer = document.querySelector('.compact-footer-meta > span');
-    if (footer && s.storeName) footer.textContent = '© ' + s.storeName;
+    if (footer && s.storeName) footer.textContent = 'Copyright ' + s.storeName;
     if (s.announcement) {
       const bar = document.createElement('div');
       bar.className = 'store-announcement';

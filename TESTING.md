@@ -134,3 +134,34 @@ Mocks não comprovam compatibilidade operacional do provedor. Uma compra real em
 - [Asaas: webhooks](https://docs.asaas.com/docs/sobre-os-webhooks)
 - [Melhor Envio: cotações](https://docs.melhorenvio.com.br/reference/calculo-de-fretes-por-produtos)
 - [Melhor Envio: webhooks](https://docs.melhorenvio.com.br/docs/webhooks)
+
+## Expedição em homologação
+
+Para testar uma remessa fictícia com declaração de conteúdo sem NF-e, execute
+`npm.cmd run test:sandbox:shipping -- --declaracao-conteudo`. Esse modo usa somente
+pedidos criados pela conta fictícia da automação em homologação. Ele prioriza
+a Jadlog quando disponível e aguarda até seis minutos por confirmação da
+compra e, depois, até seis minutos pela geração. Se o provedor deixar a
+etiqueta em processamento, consulte o mesmo envio antes de iniciar outro teste.
+
+Execute `npm.cmd run test:sandbox:shipping` sob demanda. Preencha
+`MASCAVO_SANDBOX_NFE_KEY` em `.env.sandbox` com uma chave de NF-e de teste aceita pelo
+Melhor Envio Sandbox. No mesmo arquivo, preencha `MASCAVO_SANDBOX_SENDER_JSON`
+com os dados do remetente da nota em um objeto JSON de uma linha, envolvido em
+aspas simples. Use os campos `name`, `phone`, `email`, `company_document`,
+`state_register`, `address`, `number`, `district`, `city`, `state_abbr` e
+`postal_code`. O campo `complement` é opcional. Informe telefone, CNPJ e CEP
+sem pontuação e o mesmo CNPJ da NF-e.
+
+O comando usa a sessão do Wrangler, o acesso em
+`.wrangler/staging-access.json` e a chave `ASAAS_SANDBOX_API_KEY` ou a chave Sandbox
+de `.dev.vars`. O Melhor Envio precisa estar autorizado e com saldo fictício para a etiqueta.
+
+O teste usa uma variante em estoque e configura o remetente de homologação e uma
+sessão temporária. Execute quando a homologação estiver sem um remetente cadastrado.
+O comando cria o pedido Pix, espera o webhook do Asaas, vincula a NF-e, adiciona
+o envio ao carrinho do Melhor Envio, compra e gera a etiqueta Sandbox e valida
+o link de impressão retornado. Ao sair, revoga a sessão e remove os dados
+temporários de expedição que criou. O pedido e a etiqueta ficam disponíveis
+para auditoria no Sandbox. Se uma etapa falhar após a criação, consulte o
+pedido exibido antes de rodar novamente.

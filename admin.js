@@ -15,7 +15,12 @@
     dirty = false,
     saving = false,
     notifyTimer,
-    busyLogin = false;
+    busyLogin = false,
+    unmountSales,
+    integratedShipping = false,
+    production = false;
+  const deliveryLabels = { to_arrange: 'A combinar', scheduled: 'Agendada', delivered: 'Entregue' };
+  const defaultOrderMessage = 'Olá, {nome}! Aqui é a Mascavo Fitwear. Podemos combinar a entrega do seu pedido {pedido} por aqui?';
   const editor = $('#editor'),
     fields = $('#editor-fields');
   function notify(text, error = false) {
@@ -68,6 +73,8 @@
     return `<span class="badge ${!p.active ? 'off' : !count(p) ? 'zero' : ''}">${!p.active ? 'Rascunho' : !count(p) ? 'Sem estoque' : 'Publicado'}</span>`;
   }
   async function navigate(target) {
+    unmountSales?.();
+    unmountSales = undefined;
     page = target;
     document.querySelectorAll('[data-page]').forEach((b) => {
       b.classList.toggle('active', b.dataset.page === page);
@@ -83,9 +90,10 @@
       faq: 'Dúvidas frequentes',
       settings: 'Minha loja',
       audit: 'Atividades',
-      orders: 'Pedidos e envios',
+      sales: 'Relatório de vendas',
+      orders: 'Pedidos e entregas',
       fulfillment: 'Remetente e pacotes',
-      'order-mail': 'E-mails de teste',
+      'order-mail': production ? 'E-mails de pedidos' : 'E-mails de teste',
     }[page];
     try {
       if (page === 'overview') overview();
@@ -95,6 +103,7 @@
       if (page === 'categories') categoryPage();
       if (page === 'settings') await settingsPage();
       if (page === 'audit') await auditPage();
+      if (page === 'sales') await salesPage();
       if (page === 'orders') await ordersPage();
       if (page === 'fulfillment') await fulfillmentPage();
       if (page === 'order-mail') await orderMailPage();
@@ -107,6 +116,15 @@
       notify(e.message, true);
     }
   }
+  async function salesPage() {
+    const host = document.createElement('div');
+    host.textContent = 'Carregando relatório…';
+    $('#main').replaceChildren(host);
+    const { mountSalesDashboard } = await import('/assets/rail-ui/admin-sales.js');
+    if (page === 'sales' && host.isConnected) {
+      unmountSales = mountSalesDashboard(host, days => api('orders/sales-report?days=' + days));
+    }
+  }
   function overview() {
     const variants = products.flatMap((p) => p.variants),
       units = variants.reduce((n, v) => n + v.stock, 0),
@@ -115,10 +133,10 @@
       heading(
         'Tudo começa por aqui.',
         'Uma visão tranquila de cada detalhe da sua coleção.',
-        '<button class="primary" data-new>Novo produto ↗</button>',
+        '<button class="primary" data-new>Novo produto</button>',
       ) +
       `<div class="stats"><article class="stat"><small>Produtos na coleção</small><strong>${products.length}</strong><p>${products.filter((p) => p.active).length} publicados na vitrine</p></article><article class="stat"><small>Peças disponíveis</small><strong>${units}</strong><p>Somatório de todas as variantes</p></article><article class="stat"><small>Estoque baixo</small><strong>${low}</strong><p>Variantes com uma peça ou esgotadas</p></article><article class="stat"><small>Categorias</small><strong>${categories.length}</strong><p>Para organizar suas escolhas</p></article></div>` +
-      '<div class="split"><article class="welcome-card"><span class="eyebrow">CUIDADO EM CADA ESCOLHA</span><h2>Uma coleção com a sua assinatura.</h2><p>Adicione peças, escolha as melhores imagens e acompanhe cada cor e tamanho em um só lugar.</p><button class="secondary" data-page="products">Cuidar da coleção ↗</button></article><article class="card"><span class="eyebrow">ANTES DE PUBLICAR</span><h2>Os detalhes importam.</h2><p class="hint">Confira fotos, preço, descrição e estoque de cada variante. Produtos em rascunho ficam fora da vitrine.</p><button class="secondary" data-page="inventory">Revisar estoque ↗</button></article></div>' +
+      '<div class="split"><article class="welcome-card"><span class="eyebrow">CUIDADO EM CADA ESCOLHA</span><h2>Uma coleção com a sua assinatura.</h2><p>Adicione peças, escolha as melhores imagens e acompanhe cada cor e tamanho em um só lugar.</p><button class="secondary" data-page="products">Cuidar da coleção</button></article><article class="card"><span class="eyebrow">ANTES DE PUBLICAR</span><h2>Os detalhes importam.</h2><p class="hint">Confira fotos, preço, descrição e estoque de cada variante. Produtos em rascunho ficam fora da vitrine.</p><button class="secondary" data-page="inventory">Revisar estoque</button></article></div>' +
       '<div class="card"><h2>Precisam de atenção</h2><div class="category-list">' +
       products
         .filter((p) => !p.active || p.variants.some((v) => v.stock <= 1))
@@ -128,14 +146,15 @@
             `<div class="category-row"><div>${esc(p.name)}<span> · ${count(p)} peça(s)</span></div><button class="secondary" data-edit="${p.id}">Revisar</button></div>`,
         )
         .join('') +
-      '</div><p class="hint">Pagamentos e frete continuam em sandbox. Pedidos e reservas de estoque ainda não estão habilitados.</p></div>';
+      '</div><p class="hint">' + (production ? 'Acompanhe os pagamentos no menu Pedidos e entregas.'
+        : 'Os pagamentos são de teste no Asaas Sandbox. Acompanhe os pedidos no menu Pedidos e entregas.') + '</p></div>';
   }
   function productPage() {
     $('#main').innerHTML =
       heading(
         'Sua coleção.',
         'Peças, imagens e detalhes que dão vida à vitrine.',
-        '<button class="primary" data-new>Novo produto ↗</button>',
+        '<button class="primary" data-new>Novo produto</button>',
       ) +
       '<div class="toolbar"><input id="product-search" aria-label="Buscar produto" placeholder="Buscar pelo nome da peça…"><select id="category-filter" aria-label="Filtrar categoria"><option value="">Todas as categorias</option>' +
       categories.map((c) => `<option>${esc(c.name)}</option>`).join('') +
@@ -160,7 +179,7 @@
       ? rows
           .map(
             (p) =>
-              `<article class="product-card"><div class="product-cover"><img src="${esc(p.images[0]?.src || p.variants[0]?.image_url || '')}" alt="${esc(p.name)}" loading="lazy">${badge(p)}</div><div class="product-copy"><span class="eyebrow">${esc(p.category)}</span><h3>${esc(p.name)}</h3><div class="meta"><strong>${money(p.price_cents)}</strong><span>${count(p)} peça(s) · ${p.variants.length} variantes</span></div><button class="secondary" data-edit="${p.id}">Editar produto ↗</button></div></article>`,
+              `<article class="product-card"><div class="product-cover"><img src="${esc(p.images[0]?.src || p.variants[0]?.image_url || '')}" alt="${esc(p.name)}" loading="lazy">${badge(p)}</div><div class="product-copy"><span class="eyebrow">${esc(p.category)}</span><h3>${esc(p.name)}</h3><div class="meta"><strong>${money(p.price_cents)}</strong><span>${count(p)} peça(s) · ${p.variants.length} variantes</span></div><button class="secondary" data-edit="${p.id}">Editar produto</button></div></article>`,
           )
           .join('')
       : '<div class="empty"><h2>Nenhuma peça encontrada.</h2><p>Experimente outro filtro ou adicione seu primeiro produto.</p></div>';
@@ -362,7 +381,7 @@
       heading(
         'Imagens que contam histórias.',
         'Sua biblioteca de fotos para compor cada produto.',
-        '<label class="primary">Enviar imagem ↗<input id="library-upload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>',
+        '<label class="primary">Enviar imagem<input id="library-upload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>',
       ) +
       '<p class="hint">Copie o caminho para usar nas variantes ou na galeria de um produto. Remover uma foto da galeria não apaga o arquivo da biblioteca.</p><div class="media-grid">' +
       all
@@ -432,18 +451,25 @@
         ['heroTitle2', 'Campanha 2: título', s.heroTitle2 || ''],
         ['heroText2', 'Campanha 2: descrição', s.heroText2 || ''],
         ['heroImage2', 'Campanha 2: caminho da imagem', s.heroImage2 || ''],
+        ...(integratedShipping ? [
         ['shippingOriginCep', 'Frete: CEP de origem', s.shippingOriginCep || ''],
         ['shippingWeightKg', 'Frete: peso por item (kg)', s.shippingWeightKg || ''],
         ['shippingWidthCm', 'Frete: largura (cm)', s.shippingWidthCm || ''],
         ['shippingHeightCm', 'Frete: altura (cm)', s.shippingHeightCm || ''],
         ['shippingLengthCm', 'Frete: comprimento (cm)', s.shippingLengthCm || ''],
+        ] : []),
       ]
         .map(
           ([key, label, value]) =>
             `<label>${label}<input name="${key}" value="${esc(value)}" ${['storeName', 'tagline'].includes(key) ? 'required' : ''} ${key === 'contactEmail' ? 'type="email"' : ''} maxlength="${key === 'announcement' ? 180 : key === 'tagline' ? 150 : 254}"></label>`,
         )
         .join('') +
-      '</div><p class="hint">O nome atualiza o título e o rodapé. O aviso aparece acima da campanha; os contatos são adicionados ao rodapé. As chaves de API permanecem fora do painel, no arquivo local de segredos.</p></section><button class="primary">Salvar configurações ↗</button></form>';
+      '</div><p class="hint">O nome atualiza o título e o rodapé. O aviso aparece acima da campanha; os contatos são adicionados ao rodapé. As chaves de API permanecem fora do painel, no arquivo local de segredos.</p></section>' +
+      `<section class="card"><h2>Entrega pela loja</h2><label>Política de entrega<textarea name="deliveryPolicy" maxlength="500" rows="4">${esc(s.deliveryPolicy || '')}</textarea></label>
+      <p class="hint">Informe as regiões atendidas, prazos, opções de retirada e como combinar eventual taxa. A loja exibe esse texto antes do pagamento.</p>
+      <label>Mensagem padrão para WhatsApp do cliente<textarea name="orderWhatsAppMessage" maxlength="500" rows="4">${esc(s.orderWhatsAppMessage || defaultOrderMessage)}</textarea></label>
+      <p class="hint">Use {nome} para o nome do cliente e {pedido} para o número do pedido. A mensagem abre no WhatsApp para você revisar e enviar.</p></section>
+      <button class="primary">Salvar configurações</button></form>`;
     $('#settings-form').onsubmit = async (e) => {
       e.preventDefault();
       const b = e.target.querySelector('button');
@@ -460,6 +486,9 @@
           'shippingLengthCm',
         ])
           if (key in data) data[key] = Number(data[key]);
+        if (!integratedShipping) {
+          for (const [key, value] of Object.entries(s)) if (key.startsWith('shipping')) data[key] = value;
+        }
         const result = await api('admin/settings', { data, revision: row.revision });
         row.revision = result.revision;
         notify('Configurações aplicadas à loja.');
@@ -485,18 +514,77 @@
       (entries.length ? '' : '<p class="empty">As próximas alterações aparecerão aqui.</p>');
   }
   async function ordersPage() {
-    const data=await api('orders/manage');
-    $('#main').innerHTML=heading('Pedidos e envios','Sandbox: confirme o pagamento, informe a nota fiscal e prepare a entrega.')+'<div id="commerce-orders"></div>';
+    const [data, settings] = await Promise.all([api('orders/manage'), api('admin/settings')]);
+    const orderMessage = JSON.parse(settings.data).orderWhatsAppMessage || defaultOrderMessage;
+    $('#main').innerHTML=heading('Pedidos e entregas','Confira o pagamento e atualize a entrega de cada pedido.')+'<div id="commerce-orders"></div>';
     if (!data.orders.length) $('#commerce-orders').textContent = 'Nenhum pedido cadastrado ainda.';
     for(const order of data.orders) {
       const card=document.createElement('article');card.className='card';
-      card.innerHTML=`<h2>Pedido ${esc(order.id.slice(0,8))}</h2><p>${money(order.amount_cents)} · ${esc(order.payment_state)} · Reserva: ${esc(order.reservation_state)}</p><button class="secondary" type="button">Abrir pedido</button><div class="order-detail"></div>`;
+      card.innerHTML=`<h2>Pedido ${esc(order.id.slice(0,8))}</h2><p>${money(order.amount_cents)} · ${esc(order.payment_state)} · Reserva: ${esc(order.reservation_state)}</p>${integratedShipping ? '' : '<p data-delivery-summary></p>'}<button class="secondary" type="button">Abrir pedido</button><div class="order-detail"></div>`;
       const detail=card.querySelector('.order-detail');
+      const deliverySummary = card.querySelector('[data-delivery-summary]');
+      const updateSummary = (state, date) => {
+        if (deliverySummary) {
+          deliverySummary.textContent = 'Entrega pela loja: ' + (deliveryLabels[state] || deliveryLabels.to_arrange)
+            + (date ? ' · ' + date.split('-').reverse().join('/') : '');
+        }
+      };
+      updateSummary(order.delivery_state, order.delivery_date);
       async function renderDetail() {
         const data=await api('orders/'+order.id),o=data.order;
         detail.innerHTML=`<p>Pagamento: ${esc(o.paymentState)}</p><p>Entrega: ${esc(o.snapshot.address.recipient)}, ${esc(o.snapshot.address.street)}, ${esc(o.snapshot.address.number)} · ${esc(o.snapshot.address.cep)}</p><p>${o.snapshot.items.map(i=>`${esc(i.qty)} × ${esc(i.name)} (${esc(i.color)}, ${esc(i.size)})`).join('<br>')}</p><button data-reconcile class="secondary">Consultar pagamento no Asaas</button><form data-fiscal><label>Chave da nota fiscal<input name="key" inputmode="numeric" pattern="[0-9]{44}" maxlength="44" required value="${esc(o.fiscal?.key||'')}"></label><button class="secondary">Salvar nota fiscal</button></form><button data-prepare class="primary">Preparar expedição</button><div data-shipments></div>`;
         detail.querySelector('[data-reconcile]').onclick=async e=>{e.target.disabled=true;try{await api('orders/'+order.id+'/reconcile',{});await renderDetail();}catch(error){notify(error.message,true);e.target.disabled=false;}};
         detail.querySelector('[data-fiscal]').onsubmit=async e=>{e.preventDefault();try{await api('orders/'+order.id+'/fiscal',Object.fromEntries(new FormData(e.target)));notify('Nota fiscal salva.');}catch(error){notify(error.message,true);}};
+        const reconcileButton = detail.querySelector('[data-reconcile]');
+        if (/^[1-9]{2}\d{8,9}$/.test(o.contactPhone || '')) {
+          const contact = document.createElement('a');
+          const values = { nome: o.snapshot.customer?.name || o.snapshot.address.recipient, pedido: order.id.slice(0,8) };
+          const url = new URL('https://wa.me/55' + o.contactPhone);
+          url.search = '?text=' + encodeURIComponent(orderMessage.replace(/\{(nome|pedido)\}/g, (_, field) => values[field]));
+          contact.href = url.href;
+          contact.target = '_blank';
+          contact.rel = 'noopener noreferrer';
+          contact.className = 'secondary order-whatsapp';
+          contact.textContent = 'Conversar no WhatsApp';
+          reconcileButton.before(contact);
+        } else {
+          const notice = document.createElement('p');
+          notice.textContent = 'Este pedido não tem um telefone com DDD cadastrado.';
+          reconcileButton.before(notice);
+        }
+        if (!integratedShipping) {
+          updateSummary(o.deliveryState, o.deliveryDate);
+          detail.querySelector('[data-prepare]').remove();
+          detail.querySelector('[data-shipments]').remove();
+          const address = o.snapshot.address;
+          const deliveryDetails = document.createElement('p');
+          deliveryDetails.textContent = [address.complement, address.neighborhood, address.city, address.state,
+            o.snapshot.customer.phone, o.snapshot.customer.email].filter(Boolean).join(' · ');
+          detail.querySelectorAll('p')[1].after(deliveryDetails);
+          const form = document.createElement('form');
+          form.className = 'form-grid';
+          form.innerHTML = `<h3>Entrega pela loja</h3>
+            <label>Status da entrega<select name="state">${Object.entries(deliveryLabels).map(([state, label]) =>
+              `<option value="${state}" ${state === o.deliveryState ? 'selected' : ''} ${state !== 'to_arrange' && o.paymentState !== 'paid' ? 'disabled' : ''}>${label}</option>`).join('')}</select></label>
+            <label>Data da entrega<input type="date" name="date" value="${esc(o.deliveryDate || '')}"></label>
+            <button class="primary">Salvar entrega</button>`;
+          const state = form.elements.state, date = form.elements.date, save = form.querySelector('button');
+          const updateDate = () => { date.disabled = state.value === 'to_arrange'; date.required = !date.disabled; };
+          state.addEventListener('change', updateDate);
+          updateDate();
+          form.onsubmit = async event => {
+            event.preventDefault();
+            const payload = { state: state.value, date: date.disabled ? null : date.value };
+            save.disabled = true;
+            try {
+              await api('orders/' + order.id + '/delivery', payload);
+              updateSummary(payload.state, payload.date);
+              notify('Entrega atualizada.');
+            } catch (error) { notify(error.message, true); } finally { save.disabled = false; }
+          };
+          detail.append(form);
+          return;
+        }
         detail.querySelector('[data-prepare]').onclick=async e=>{e.target.disabled=true;try{await api('orders/'+order.id+'/shipment',{});await renderDetail();}catch(error){notify(error.message,true);e.target.disabled=false;}};
         for(const s of data.shipments) {
           const box=document.createElement('section');box.innerHTML=`<h3>Envio ${esc(s.sequence)} · ${esc(s.state)}</h3><p>Rastreio: ${esc(s.tracking||'aguardando transportadora')}</p>`;
@@ -523,6 +611,20 @@
   }
   async function orderMailPage() {
     const data=await api('orders/mail');
+    if (data.transport === 'disabled') {
+      $('#main').innerHTML = heading('E-mails de pedidos', 'O envio ainda não está configurado.');
+      return;
+    }
+    if (data.transport === 'resend_test' || data.transport === 'resend') {
+      const statuses = { queued_email: 'Na fila', email_accepted: 'Aceito pelo provedor', email_review: 'Requer revisão' };
+      const subjects = { order_created: 'Pedido recebido', staff_order_created: 'Aviso de novo pedido à loja', payment_confirmed: 'Pagamento confirmado' };
+      $('#main').innerHTML = (data.transport === 'resend' ? heading('E-mails de pedidos', 'Acompanhe os envios ao cliente.')
+        : heading('E-mails de teste', 'As mensagens são encaminhadas à caixa de teste configurada.')) +
+        (data.messages.length ? data.messages.map(message =>
+          `<article class="card"><h2>${esc(subjects[message.kind])}</h2><p>Pedido ${esc(message.order_id.slice(0,8))} · ${esc(statuses[message.state])} · Tentativas: ${esc(message.attempts)}</p></article>`,
+        ).join('') : '<p class="empty">Nenhum e-mail de pedido enfileirado.</p>');
+      return;
+    }
     $('#main').innerHTML=heading('E-mails de teste','Caixa local: nenhuma mensagem é enviada a clientes.')+data.messages.map(m=>`<article class="card"><h2>${esc(m.subject)}</h2><p>${esc(m.recipient)}</p><pre>${esc(m.payload_json)}</pre></article>`).join('');
   }
   document.addEventListener('click', async (e) => {
@@ -543,7 +645,12 @@
   });
   async function enter() {
     await api('admin/session');
-    await load();
+    const [, health] = await Promise.all([load(), api('health')]);
+    production = health.production === true;
+    integratedShipping = health.integratedShipping === true;
+    $('[data-page="fulfillment"]').hidden = !integratedShipping;
+    $('.environment-dot').textContent = production ? (health.checkout === 'live' ? 'Produção' : 'Vendas fechadas') : 'Sandbox';
+    $('[data-page="order-mail"] span').textContent = production ? 'E-mails de pedidos' : 'E-mails de teste';
     $('#admin-login').hidden = true;
     $('#admin-shell').hidden = false;
     await navigate(page);
@@ -645,9 +752,9 @@
         testimonial
           ? 'Experiências reais de quem faz parte da Mascavo.'
           : 'Clareza em cada etapa da experiência com a loja.',
-        `<button class="primary" id="new-content">${testimonial ? 'Novo depoimento' : 'Nova pergunta'} ↗</button>`,
+        `<button class="primary" id="new-content">${testimonial ? 'Novo depoimento' : 'Nova pergunta'}</button>`,
       ) +
-      `<div class="card"><p class="hint">${testimonial ? 'Publique relatos reais, com autorização de quem enviou. Fotos e avaliações são opcionais.' : 'As respostas publicadas aparecem na página de dúvidas frequentes. Revise as condições da loja antes de publicar políticas de compra.'}</p><a href="${testimonial ? '/#depoimentos' : '/duvidas-frequentes'}" target="_blank" rel="noopener" class="secondary">Ver no site ↗</a></div>` +
+      `<div class="card"><p class="hint">${testimonial ? 'Publique relatos reais, com autorização de quem enviou. Fotos e avaliações são opcionais.' : 'As respostas publicadas aparecem na página de dúvidas frequentes. Revise as condições da loja antes de publicar políticas de compra.'}</p><a href="${testimonial ? '/#depoimentos' : '/duvidas-frequentes'}" target="_blank" rel="noopener" class="secondary">Ver no site</a></div>` +
       '<div class="toolbar"><input id="content-search" placeholder="Buscar conteúdo…" aria-label="Buscar conteúdo"><select id="content-status" aria-label="Filtrar publicação"><option value="">Todos os status</option><option value="1">Publicados</option><option value="0">Rascunhos</option></select></div><div class="editorial-admin-list" id="content-items"></div>';
     function draw() {
       const term = $('#content-search').value.toLocaleLowerCase(),
@@ -661,7 +768,7 @@
         ? rows
             .map(
               (item) =>
-                `<article class="card editorial-admin-card"><div><span class="badge ${item.published ? '' : 'off'}">${item.published ? 'Publicado' : 'Rascunho'}</span><span class="hint"> · posição ${item.sort_order}</span><h2>${esc(testimonial ? item.author_name : item.question)}</h2><p class="editorial-admin-copy">${esc(testimonial ? item.quote : item.answer)}</p><small class="hint">${esc(testimonial ? item.author_detail : item.category)}</small></div><button class="secondary" data-content-edit="${esc(item.id)}">Editar ↗</button></article>`,
+                `<article class="card editorial-admin-card"><div><span class="badge ${item.published ? '' : 'off'}">${item.published ? 'Publicado' : 'Rascunho'}</span><span class="hint"> · posição ${item.sort_order}</span><h2>${esc(testimonial ? item.author_name : item.question)}</h2><p class="editorial-admin-copy">${esc(testimonial ? item.quote : item.answer)}</p><small class="hint">${esc(testimonial ? item.author_detail : item.category)}</small></div><button class="secondary" data-content-edit="${esc(item.id)}">Editar</button></article>`,
             )
             .join('')
         : '<div class="empty"><h2>A próxima história começa aqui.</h2><p>Nenhum conteúdo encontrado. Adicione um novo item ou ajuste os filtros.</p></div>';

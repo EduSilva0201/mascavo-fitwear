@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID, createHmac } from 'node:crypto';
+import { randomUUID, createHmac, createHash, randomBytes } from 'node:crypto';
 import { createWorker, cart, origin } from '../support/worker.mjs';
 
 const sender = {
@@ -19,8 +19,8 @@ const sender = {
 };
 const pack = { weight: 0.3, width: 20, height: 4, length: 25 };
 const token = 'fixture-webhook-token-with-at-least-32-characters';
-async function fixture() {
-  const app = await createWorker(),
+async function fixture(bindings) {
+  const app = await createWorker({ bindings }),
     customer = await app.client(),
     admin = await app.client({ role: 'admin' });
   const addressId = randomUUID();
@@ -151,6 +151,322 @@ async function fixture() {
   };
 }
 
+test('commerce: Asaas checkout works while Melhor Envio is paused', async () => {
+  const f = await fixture({ MELHOR_ENVIO_ENABLED: 'false' });
+  try {
+    assert.equal((await f.quote()).status, 404);
+    const payload = {
+      items: cart,
+      addressId: f.addressId,
+      requestKey: randomUUID(),
+      billingType: 'PIX',
+      installments: 1,
+    };
+    await f.app.db.prepare("UPDATE customer_profiles SET phone='' WHERE customer_id=?").bind(f.customer.id).run();
+    const missingPhone = await f.customer.call('/api/v1/orders', payload);
+    assert.equal(missingPhone.status, 400);
+    assert.match(missingPhone.body.error, /telefone/i);
+    assert.equal(f.app.calls.length, 0);
+    await f.app.db.prepare("UPDATE customer_profiles SET phone='11999990000' WHERE customer_id=?").bind(f.customer.id).run();
+    const order = await f.customer.call('/api/v1/orders', payload);
+    assert.equal(order.status, 201, JSON.stringify(order.body));
+    assert.equal(order.body.invoiceUrl, 'https://sandbox.asaas.com/i/pay_1');
+    const detail = await f.customer.call('/api/v1/orders/' + order.body.orderId);
+    assert.equal(detail.body.order.snapshot.shipping, null);
+    assert.equal(detail.body.order.contactPhone, '11999990000');
+    assert.equal(order.body.amountCents, detail.body.order.snapshot.subtotalCents);
+    assert.equal(f.payments.get('pay_1').value, order.body.amountCents / 100);
+    const retry = await f.customer.call('/api/v1/orders', payload);
+    assert.equal(retry.body.orderId, order.body.orderId);
+    assert.equal(f.payments.size, 1);
+    assert.deepEqual([...new Set(f.app.calls.map(call => call.host))], ['api-sandbox.asaas.com']);
+    assert.equal((await f.admin.call('/api/v1/orders/' + order.body.orderId + '/shipment', {})).status, 404);
+    const deliveryPath = '/api/v1/orders/' + order.body.orderId + '/delivery';
+    const schedule = { state: 'scheduled', date: '2026-11-30' };
+    assert.equal((await f.customer.call(deliveryPath, schedule)).status, 403);
+    assert.equal((await f.admin.call(deliveryPath, { ...schedule, date: '' })).status, 400);
+    assert.equal((await f.admin.call(deliveryPath, schedule)).status, 409);
+    f.payments.get('pay_1').status = 'CONFIRMED';
+    const paid = await f.admin.call('/api/v1/orders/' + order.body.orderId + '/reconcile', {});
+    assert.equal(paid.body.paymentState, 'paid');
+    assert.equal((await f.admin.call(deliveryPath, schedule)).status, 200);
+    const list = await f.customer.call('/api/v1/orders');
+    assert.equal(list.body.orders[0].delivery_state, 'scheduled');
+    assert.equal(list.body.orders[0].delivery_date, schedule.date);
+    assert.equal((await f.admin.call(deliveryPath, { ...schedule, state: 'delivered' })).status, 200);
+    const delivered = await f.customer.call('/api/v1/orders/' + order.body.orderId);
+    assert.equal(delivered.body.order.deliveryState, 'delivered');
+    assert.equal(delivered.body.order.paymentState, 'paid');
+    await f.app.db.prepare("UPDATE orders SET snapshot_json=json_remove(snapshot_json,'$.customer.phone') WHERE id=?")
+      .bind(order.body.orderId).run();
+    const legacyOrder = await f.admin.call('/api/v1/orders/' + order.body.orderId);
+    assert.equal(legacyOrder.body.order.contactPhone, '11999990000');
+  } finally {
+    await f.app.dispose();
+  }
+});
+
+test('sales report limits access and groups orders by local date and current payment state', async () => {
+  const f = await fixture();
+  try {
+    const endpoint = '/api/v1/orders/sales-report?days=7';
+    assert.equal((await f.customer.call(endpoint)).status, 403);
+    assert.equal((await f.admin.call('/api/v1/orders/sales-report?days=8')).status, 400);
+    const empty = (await f.admin.call(endpoint)).body;
+    assert.equal(empty.dates.length, 7);
+    assert.deepEqual(empty.sales, []);
+    const snapshot = JSON.stringify({ items: [{ id: 14, name: 'Produto de teste', qty: 2 }] });
+    const insert = f.app.db.prepare(
+      `INSERT INTO orders
+        (id, customer_id, request_key, request_json, snapshot_json, amount_cents, billing_type, installments,
+         payment_state, expires_at, created_at)
+       VALUES (?, ?, ?, '{}', ?, ?, 'PIX', 1, ?, 0, ?)`,
+    );
+    const midnight = Date.parse(empty.dates[0] + 'T00:00:00-03:00') / 1000;
+    for (const [state, cents, timestamp] of [
+      ['paid', 17000, midnight],
+      ['paid', 99999, midnight - 1],
+      ['pending', 5000, midnight],
+      ['refund', 8000, midnight],
+    ]) {
+      await insert.bind(randomUUID(), f.customer.id, randomUUID(), snapshot, cents, state, timestamp).run();
+    }
+    const report = await f.admin.call(endpoint);
+    assert.equal(report.status, 200);
+    assert.deepEqual(report.body.sales.map(({ day, state, amountCents }) => [day, state, amountCents]).sort(), [
+      [empty.dates[0], 'paid', 17000],
+      [empty.dates[0], 'pending', 5000],
+      [empty.dates[0], 'refund', 8000],
+    ]);
+    assert.deepEqual(report.body.products.map(({ id, units }) => [id, units]), [[14, 2]]);
+  } finally {
+    await f.app.dispose();
+  }
+});
+
+test('order email uses only the staging inbox and retries with the same payload and key', async () => {
+  const staging = 'https://teste.example.test';
+  const password = 'fixture-password-with-at-least-24-chars';
+  const inbox = 'staging-inbox@example.test';
+  const f = await fixture({
+    APP_ENV: 'staging', APP_ORIGIN: staging, MELHOR_ENVIO_ENABLED: 'false',
+    STAGING_USERNAME: 'tester', STAGING_PASSWORD: password,
+    RESEND_API_KEY: 're_fixture', ORDER_EMAIL_FROM: 'Mascavo <pedidos@example.test>', ORDER_EMAIL_TEST_TO: inbox,
+  });
+  try {
+    const session = randomBytes(32).toString('hex');
+    await f.app.db.prepare('UPDATE sessions SET token_hash=? WHERE customer_id=?')
+      .bind(createHash('sha256').update(session).digest('hex'), f.customer.id).run();
+    const authorization = 'Basic ' + Buffer.from('tester:' + password).toString('base64');
+    const post = (path, payload) => f.app.runtime.dispatchFetch(staging + path, {
+      method: 'POST',
+      headers: {
+        authorization, origin: staging, 'content-type': 'application/json', 'X-CSRF-Token': f.customer.csrf,
+        cookie: '__Host-mascavo-session=' + session + '; __Host-mascavo-csrf=' + f.customer.csrf,
+        'X-Maintenance-Token': 'fixture-maintenance-token-at-least-32-characters',
+      },
+      body: JSON.stringify(payload),
+    });
+    let mailAttempts = 0;
+    f.override(call => {
+      if (call.host !== 'api.resend.com') return;
+      return ++mailAttempts === 1 ? new Response(null, { status: 503 }) : Response.json({ id: 'email-' + mailAttempts });
+    });
+    const created = await post('/api/v1/orders', {
+      items: cart, addressId: f.addressId, requestKey: randomUUID(), billingType: 'PIX', installments: 1,
+    });
+    assert.equal(created.status, 201);
+    const { orderId } = await created.json();
+    const process = () => post('/api/v1/webhooks/process', {});
+    assert.equal((await process()).status, 200);
+    assert.equal((await process()).status, 200);
+    assert.equal(mailAttempts, 1, JSON.stringify(await f.app.db.prepare(
+      'SELECT state,attempts,email_started_at FROM order_notifications',
+    ).all()));
+    await f.app.db.prepare('UPDATE order_notifications SET email_next_attempt_at=0').run();
+    assert.equal((await process()).status, 200);
+    f.payments.get('pay_1').status = 'CONFIRMED';
+    assert.equal((await (await post('/api/v1/orders/' + orderId + '/reconcile', {})).json()).paymentState, 'paid');
+    assert.equal((await process()).status, 200);
+    assert.equal((await process()).status, 200);
+    const mails = f.app.calls.filter(call => call.host === 'api.resend.com');
+    assert.equal(mails.length, 3);
+    assert.deepEqual(mails[0], mails[1]);
+    assert.notEqual(mails[1].idempotencyKey, mails[2].idempotencyKey);
+    assert.match(mails[0].body.subject, /Recebemos seu pedido/);
+    assert.match(mails[2].body.subject, /Pagamento confirmado/);
+    assert.ok(mails.every(mail => mail.body.to.length === 1 && mail.body.to[0] === inbox));
+    const sent = await f.app.db.prepare("SELECT COUNT(*) AS n FROM order_notifications WHERE state='email_accepted'").first();
+    assert.equal(sent.n, 2);
+  } finally {
+    await f.app.dispose();
+  }
+});
+
+test('production checkout uses configured delivery pricing, the live Asaas host and the customer inbox', async () => {
+  const production = 'https://store.example.test';
+  const f = await fixture({
+    APP_ENV: 'production', APP_ORIGIN: production, CHECKOUT_ENABLED: 'true',
+    ASAAS_API_KEY: '$aact_prod_fixture', RESEND_API_KEY: 're_fixture',
+    ORDER_EMAIL_FROM: 'Mascavo <pedidos@example.test>', ORDER_EMAIL_TEST_TO: 'staging-only@example.test',
+    ORDER_EMAIL_STORE_TO: 'store@example.test',
+    DELIVERY_FEE_CENTS: '1500', DELIVERY_CEP_PREFIXES: '047', DELIVERY_ESTIMATE: 'Até 3 dias úteis',
+  });
+  try {
+    const session = randomBytes(32).toString('hex');
+    await f.app.db.prepare('UPDATE sessions SET token_hash=? WHERE customer_id=?')
+      .bind(createHash('sha256').update(session).digest('hex'), f.customer.id).run();
+    const post = (path, payload) => f.app.runtime.dispatchFetch(production + path, {
+      method: 'POST',
+      headers: {
+        origin: production, 'content-type': 'application/json', 'X-CSRF-Token': f.customer.csrf,
+        cookie: '__Host-mascavo-session=' + session + '; __Host-mascavo-csrf=' + f.customer.csrf,
+        'X-Maintenance-Token': 'fixture-maintenance-token-at-least-32-characters',
+      },
+      body: JSON.stringify(payload),
+    });
+    const response = await f.app.runtime.dispatchFetch(production + '/api/v1/health');
+    const health = await response.json();
+    assert.equal(health.checkout, 'live');
+    assert.equal(health.integratedShipping, false);
+    assert.deepEqual(health.paymentMethods, ['PIX']);
+    const product = await f.app.db.prepare('SELECT price_cents FROM catalog_products WHERE id=14').first();
+    const payload = {
+      items: cart, addressId: f.addressId, requestKey: randomUUID(),
+      billingType: 'PIX', installments: 1, expectedAmountCents: product.price_cents + 1500,
+    };
+    await f.app.db.prepare('UPDATE catalog_products SET provisional=1 WHERE id=14').run();
+    assert.equal((await post('/api/v1/orders', payload)).status, 409);
+    await f.app.db.prepare('UPDATE catalog_products SET provisional=0 WHERE id=14').run();
+    assert.equal((await post('/api/v1/orders', { ...payload, expectedAmountCents: product.price_cents })).status, 409);
+    assert.equal((await post('/api/v1/orders', { ...payload, billingType: 'BOLETO' })).status, 400);
+    await f.app.db.prepare("UPDATE customer_addresses SET cep='01001000' WHERE id=?").bind(f.addressId).run();
+    assert.equal((await post('/api/v1/orders', payload)).status, 400);
+    await f.app.db.prepare("UPDATE customer_addresses SET cep='04794000' WHERE id=?").bind(f.addressId).run();
+    assert.equal(f.app.calls.length, 0);
+    f.override(call => {
+      if (call.path === '/v3/payments' && call.method === 'POST') {
+        f.payments.set('pay_live_fixture', { id: 'pay_live_fixture', ...call.body, status: 'PENDING' });
+        return Response.json({ id: 'pay_live_fixture', invoiceUrl: 'https://www.asaas.com/i/live-fixture' });
+      }
+      if (call.host === 'api.resend.com') return Response.json({ id: 'mail-fixture' });
+    });
+    const created = await post('/api/v1/orders', payload);
+    assert.equal(created.status, 201);
+    const order = await created.json();
+    assert.equal(order.sandbox, false);
+    assert.equal(order.invoiceUrl, 'https://www.asaas.com/i/live-fixture');
+    const charge = f.app.calls.find(call => call.path === '/v3/payments');
+    assert.equal(charge.host, 'api.asaas.com');
+    assert.equal(charge.body.value, payload.expectedAmountCents / 100);
+    const email = 'new-customer@example.test';
+    const register = await post('/api/v1/auth/register', { email, name: 'Cliente Teste',
+      password: 'SenhaTeste!Segura2026', cpf: '52998224725', phone: '11999990000' });
+    assert.equal(register.status, 202);
+    assert.equal((await post('/api/v1/webhooks/process', {})).status, 200);
+    const sent = f.app.calls.filter(call => call.host === 'api.resend.com');
+    const customer = await f.app.db.prepare('SELECT email FROM customers WHERE id=?').bind(f.customer.id).first();
+    assert.deepEqual(sent.map(call => call.body.to[0]), [customer.email, 'store@example.test', email]);
+    const staffAlert = sent.find(call => call.body.to[0] === 'store@example.test');
+    assert.match(staffAlert.body.subject, /^Novo pedido na loja/);
+    assert.ok(staffAlert.body.text.includes(production + '/admin'));
+    assert.ok(staffAlert.body.text.includes(order.orderId));
+    assert.ok(sent.every(call => !call.body.subject.includes('[Teste]')));
+    const verify = sent.find(call => call.body.subject.startsWith('Confirme seu e-mail'));
+    const code = verify.body.text.match(/[a-f0-9]{64}/)[0];
+    assert.ok(verify.body.text.includes(production + '/#mascavo-confirmar=' + code));
+    assert.equal((await post('/api/v1/auth/forgot-password', { email })).status, 202);
+    assert.equal((await post('/api/v1/webhooks/process', {})).status, 200);
+    const recovery = f.app.calls.find(call => call.body?.subject?.startsWith('Recupere sua senha') && call.body.to[0] === email);
+    const resetCode = recovery.body.text.match(/[a-f0-9]{64}/)[0];
+    assert.ok(recovery.body.text.includes(production + '/#mascavo-redefinir=' + resetCode));
+    const newPassword = 'NovaSenhaTeste!Mascavo2026';
+    assert.equal((await post('/api/v1/auth/reset-password', { token: resetCode, password: newPassword })).status, 200);
+    const account = await f.app.db.prepare('SELECT email_verified_at FROM customers WHERE email=?').bind(email).first();
+    assert.ok(account.email_verified_at);
+    assert.equal((await post('/api/v1/auth/login', { email, password: newPassword })).status, 200);
+    assert.equal((await post('/api/v1/auth/verify-email', { token: code })).status, 400);
+    f.payments.get('pay_live_fixture').status = 'CONFIRMED';
+    const webhook = await f.app.runtime.dispatchFetch(production + '/api/v1/webhooks/asaas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'asaas-access-token': token },
+      body: JSON.stringify({ id: 'evt_live_fixture', event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_live_fixture' } }),
+    });
+    assert.equal(webhook.status, 200);
+    assert.equal((await post('/api/v1/webhooks/process', {})).status, 200);
+    const confirmation = f.app.calls.find(call => call.body?.subject?.startsWith('Pagamento confirmado') && call.body.to[0] === customer.email);
+    assert.ok(confirmation);
+    const deliveryNotice = 'Em até 24 horas após a confirmação, você receberá as informações de entrega pelo WhatsApp ou por e-mail.';
+    assert.ok(confirmation.body.text.includes(deliveryNotice));
+    assert.ok(confirmation.body.html.includes(deliveryNotice));
+    const brandedMessages = f.app.calls.filter(call => call.host === 'api.resend.com');
+    assert.equal(brandedMessages.length, 5);
+    assert.equal(brandedMessages.filter(call => call.body.to[0] === 'store@example.test').length, 1);
+    for (const { body } of brandedMessages) {
+      assert.match(body.html, /https:\/\/mascavofit\.com\.br\/assets\/brand\/mascavo-logo\.png/);
+      assert.match(body.html, /alt="Mascavo Fitwear"/);
+      assert.ok(body.text.trim());
+    }
+    assert.equal((await f.app.runtime.dispatchFetch(production + '/api/v1/dev/mail')).status, 404);
+  } finally {
+    await f.app.dispose();
+  }
+});
+
+test('the private production checkout allows one fixed-value Pix order only for the designated administrator', async () => {
+  const production = 'https://store.example.test';
+  const email = 'pilot-admin@example.test';
+  const f = await fixture({
+    APP_ENV: 'production', APP_ORIGIN: production, CHECKOUT_ENABLED: 'false',
+    ASAAS_API_KEY: '$aact_prod_fixture', RESEND_API_KEY: 're_fixture', ORDER_EMAIL_FROM: 'pedidos@example.test',
+    CHECKOUT_PILOT_EMAIL: email, CHECKOUT_PILOT_AMOUNT_CENTS: '500',
+  });
+  try {
+    await f.app.db.prepare('UPDATE customers SET email=? WHERE id=?').bind(email, f.admin.id).run();
+    await f.app.db.prepare('UPDATE customer_addresses SET customer_id=? WHERE id=?').bind(f.admin.id, f.addressId).run();
+    const id = 999999991;
+    await f.app.db.prepare(
+      "INSERT INTO catalog_products(id,name,category,description,price_cents,provisional,active,sort_order) VALUES (?,'Teste Pix','Conjuntos','Sem envio',500,0,1,0)",
+    ).bind(id).run();
+    await f.app.db.prepare(
+      "INSERT INTO catalog_variants(product_id,color,size,stock,image_url,sort_order) VALUES (?,'Preto','M',1,'assets/brand/mascavo-logo.png',0)",
+    ).bind(id).run();
+    const authHeaders = async client => {
+      const session = randomBytes(32).toString('hex');
+      await f.app.db.prepare('UPDATE sessions SET token_hash=? WHERE customer_id=?')
+        .bind(createHash('sha256').update(session).digest('hex'), client.id).run();
+      return { origin: production, 'content-type': 'application/json', 'X-CSRF-Token': client.csrf,
+        cookie: '__Host-mascavo-session=' + session + '; __Host-mascavo-csrf=' + client.csrf };
+    };
+    const admin = await authHeaders(f.admin), visitor = await authHeaders(f.customer);
+    const request = (path, headers, body) => f.app.runtime.dispatchFetch(production + '/api/v1/' + path, {
+      headers, ...(body ? { method: 'POST', body: JSON.stringify(body) } : {}),
+    });
+    assert.equal((await (await request('health')).json()).checkout, 'closed');
+    assert.equal((await (await request('health', visitor)).json()).checkout, 'closed');
+    assert.equal((await (await request('health', admin)).json()).pilot, true);
+    assert.ok(!(await (await request('catalog')).json()).products.some(product => product.id === id));
+    assert.deepEqual((await (await request('catalog', admin)).json()).products.map(product => product.id), [id]);
+    const payload = { items: [{ ...cart[0], id }], addressId: f.addressId, requestKey: randomUUID(),
+      billingType: 'PIX', installments: 1, expectedAmountCents: 500 };
+    assert.equal((await request('orders', visitor, payload)).status, 503);
+    assert.equal((await request('orders', admin, { ...payload, expectedAmountCents: 600 })).status, 409);
+    assert.equal((await request('orders', admin, { ...payload, items: cart })).status, 400);
+    assert.equal(f.app.calls.length, 0);
+    f.override(call => call.path === '/v3/payments' && call.method === 'POST'
+      ? Response.json({ id: 'pay_private_test', invoiceUrl: 'https://www.asaas.com/i/private-test' })
+      : undefined);
+    const first = await request('orders', admin, payload);
+    assert.equal(first.status, 201);
+    assert.equal((await first.json()).amountCents, 500);
+    assert.equal(f.app.calls.find(call => call.path === '/v3/payments').body.value, 5);
+    assert.equal((await request('orders', admin, { ...payload, requestKey: randomUUID() })).status, 409);
+    assert.deepEqual((await (await request('orders/sales-report', admin)).json()).sales, []);
+  } finally {
+    await f.app.dispose();
+  }
+});
+
 test('commerce: immutable snapshots, payment connection, idempotency and atomic last-item reservation', async () => {
   const f = await fixture();
   try {
@@ -243,6 +559,16 @@ test('commerce: full payment-to-delivery, fiscal gating, one label purchase, pri
     assert.equal((await act('print')).status, 409);
     assert.equal((await act('purchase')).body.shipment.state, 'released');
     assert.equal((await act('purchase')).status, 200);
+    const labelId = [...f.labels.keys()][0];
+    f.override((call) => {
+      if (call.path === '/api/v2/me/shipment/tracking')
+        return Response.json({ [labelId]: { id: labelId, status: 'released' } });
+      if (call.path === '/api/v2/me/orders/' + labelId && call.method === 'GET' &&
+          f.labels.get(labelId).status === 'generated')
+        return Response.json({
+          id: labelId, status: 'released', generated_at: '2026-11-14T11:00:00Z',
+        });
+    });
     assert.equal((await act('generate')).body.shipment.state, 'generated');
     assert.equal((await act('generate')).status, 200);
     assert.equal(
@@ -250,6 +576,7 @@ test('commerce: full payment-to-delivery, fiscal gating, one label purchase, pri
       'https://sandbox.melhorenvio.com.br/print/test',
     );
     assert.equal((await act('print')).status, 200);
+    f.override(() => undefined);
     assert.equal(f.app.calls.filter((c) => c.path === '/api/v2/me/cart').length, 1);
     assert.equal(f.app.calls.filter((c) => c.path === '/api/v2/me/shipment/checkout').length, 1);
     let messages = await f.admin.call('/api/v1/orders/mail');
